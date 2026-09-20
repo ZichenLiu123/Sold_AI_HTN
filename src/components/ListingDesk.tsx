@@ -1971,7 +1971,11 @@ function LiveLinks({
   return (
     <ul className="mb-2 space-y-2">
       {rows.map((post) => {
-        const connected = connectionStatus[post.platform] === "connected";
+        const marketplace =
+          post.platform === "Gmail receipt" ? undefined : post.platform;
+        const connected = marketplace
+          ? connectionStatus[marketplace] === "connected"
+          : false;
         const recapturing =
           listing.status === "live" && post.status !== "posted";
         const showConnect = !recapturing && post.status !== "posted" && !connected;
@@ -2032,7 +2036,7 @@ function LiveLinks({
               <button
                 type="button"
                 onClick={onResume}
-                disabled={busy === "post" || (post.status !== "posted" && !connected)}
+                disabled={busy === "post" || !connected}
                 className="mt-2 h-9 w-full rounded-full bg-sold px-3 text-xs text-paper disabled:opacity-50"
               >
                 {busy === "post" ? "Publishing…" : "Try publishing again"}

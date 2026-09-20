@@ -45,12 +45,12 @@ export function titleTokens(title: string) {
     .filter((word) => word.length > 2 && !TITLE_STOP.has(word));
 }
 
-export function matchListingToText(
+export function matchListingToText<T extends Pick<Listing, "id" | "title">>(
   text: string,
-  listings: Pick<Listing, "id" | "title">[]
-) {
+  listings: T[]
+): T | null {
   const hay = text.toLowerCase();
-  let best: Pick<Listing, "id" | "title"> | null = null;
+  let best: T | null = null;
   let bestScore = 0;
   for (const listing of listings) {
     const tokens = titleTokens(listing.title);
@@ -137,14 +137,13 @@ export function isRealBuyerMessage(text: string) {
   return BUYER_SIGNAL.test(clean) || /^(hi|hey|hello|interested)\b/i.test(clean);
 }
 
-export function matchListingByRemoteItem(
-  text: string,
-  listings: {
+export function matchListingByRemoteItem<
+  T extends {
     id: string;
     title: string;
     platform_posts?: { platform: string; remote_url?: string }[];
-  }[]
-) {
+  },
+>(text: string, listings: T[]): T | null {
   const ids = [...text.matchAll(/marketplace\/item\/(\d+)/gi)].map((match) => match[1]);
   if (!ids.length) return null;
   for (const listing of listings) {
@@ -156,12 +155,11 @@ export function matchListingByRemoteItem(
   return null;
 }
 
-export function resolveThreadListing(
-  text: string,
-  listings: (Pick<Listing, "id" | "title"> & {
+export function resolveThreadListing<
+  T extends Pick<Listing, "id" | "title"> & {
     platform_posts?: { platform: string; remote_url?: string }[];
-  })[]
-) {
+  },
+>(text: string, listings: T[]): T | null {
   const byItem = matchListingByRemoteItem(text, listings);
   if (byItem) return byItem;
   const matched = matchListingToText(text, listings);

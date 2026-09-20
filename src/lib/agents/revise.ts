@@ -116,6 +116,7 @@ async function runListingRevise(listing: Listing, edits: ListingRevise) {
       ...(edits.pickup ? { pickup_notes: edits.pickup } : {}),
     },
   });
+  if (!next) throw new Error("Could not save the listing edits.");
   await logAgent(
     listing.id,
     "lister",

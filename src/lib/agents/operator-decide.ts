@@ -99,9 +99,17 @@ export function requestedPrice(note: string | undefined, listing: Pick<Listing, 
   return value > 0 ? String(Math.round(value)) : "";
 }
 
+type OperatorListing = {
+  title: string;
+  price: number;
+  description: string;
+  attributes: { brand?: string | null } | null;
+  hints: Listing["hints"];
+};
+
 export function typeValueFor(
   target: string,
-  listing: Pick<Listing, "title" | "price" | "description" | "attributes" | "hints">,
+  listing: OperatorListing,
   goal?: OperatorGoal
 ) {
   if (/price|amount/i.test(target)) return requestedPrice(goal?.note, listing);
@@ -153,7 +161,7 @@ export function shouldOpenEditorAfterStuck(history: string[], sight: FormSight) 
 export function refineAction(
   decision: OperatorAction,
   sight: FormSight,
-  listing: Pick<Listing, "title" | "price" | "description" | "attributes" | "hints">,
+  listing: OperatorListing,
   goal: OperatorGoal | undefined,
   history: string[]
 ): OperatorAction {

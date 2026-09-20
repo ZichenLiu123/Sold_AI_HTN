@@ -69,7 +69,7 @@ export function missingConnectedPlatforms(
 }
 
 export function unpublishedMarketplacePlatforms(listing: {
-  platforms: Platform[];
+  platforms: readonly Platform[];
   platform_posts: PlatformPost[];
 }): Platform[] {
   return listing.platforms.filter((platform) => {
@@ -137,7 +137,7 @@ export function listingChatReady(listing: {
 
 export function listingPublishStalled(listing: {
   status: string;
-  platforms?: Platform[];
+  platforms?: readonly Platform[];
   platform_posts: PlatformPost[];
 }): boolean {
   if (listingChatReady(listing)) return false;

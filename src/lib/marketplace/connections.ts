@@ -281,7 +281,7 @@ export async function checkConnection(platform: Platform): Promise<PublicConnect
     const running = sessionId
       ? await getBrowserbaseSession(sessionId).catch(() => null)
       : null;
-    if (running?.status === "RUNNING") {
+    if (sessionId && running?.status === "RUNNING") {
       liveUrl = await sessionLiveUrl(sessionId).catch(() => current.metadata.live_url || null);
       const now = new Date().toISOString();
       return {

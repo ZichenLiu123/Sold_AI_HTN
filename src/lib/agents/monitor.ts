@@ -82,8 +82,6 @@ const memory = globalThis as unknown as {
 
 function status(patch: Partial<FacebookMonitorStatus> = {}): FacebookMonitorStatus {
   memory.soldFbStatus = {
-    running: Boolean(memory.soldFbMonitor),
-    ticking: Boolean(memory.soldFbTick),
     interval_ms: TICK_MS,
     last_tick_at: null,
     last_error: null,
