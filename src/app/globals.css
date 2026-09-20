@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-dm), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-instrument), ui-serif, Georgia, serif;
+  --font-mono: var(--font-plex), ui-monospace, monospace;
+  --font-logo: var(--font-fraunces), ui-serif, Georgia, serif;
+  --color-paper: #efe4d4;
+  --color-ink: #1c1612;
+  --color-sold: #c5281c;
+  --color-stamp: #8e1d16;
+  --color-sage: #355c3f;
+  --color-gold: #b58a3c;
+  --color-card: #faf4ea;
+  --color-line: #d7c4a8;
+  --color-wash: #e7d8c2;
+}
+
+html,
+body {
+  background: #1c1612;
+  color: var(--color-ink);
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.sold-main {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(5.25rem + env(safe-area-inset-bottom));
+  scrollbar-width: none;
+}
+
+.sold-main::-webkit-scrollbar {
+  display: none;
+}
+
+::selection {
+  background: #c5281c;
+  color: #faf4ea;
+}
+
+.app-shell {
+  background: var(--color-paper);
+  background-image:
+    radial-gradient(rgba(28, 22, 18, 0.045) 0.7px, transparent 0.7px),
+    linear-gradient(180deg, #f4eadc 0%, #efe4d4 55%, #eadcc8 100%);
+  background-size: 3px 3px, 100% 100%;
+}
+
+.sold-mark {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 0.85;
+}
+
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+  padding: 0.2rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.app-shell:has([data-listing]) .sold-header,
+.app-shell:has([data-listing]) .tab-bar {
+  display: none;
+}
+
+.app-shell:has([data-listing]) .sold-main {
+  padding-bottom: 0;
+  padding-top: env(safe-area-inset-top);
+}

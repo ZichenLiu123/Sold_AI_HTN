@@ -1,0 +1,33 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# next
+/.next/
+/out/
+
+# env
+.env
+.env*.local
+!.env.example
+
+# data
+/data/*.db
+/data/*.db-*
+/data/chrome-profiles/
+/data/browserbase-minutes-spent
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# debug
+npm-debug.log*
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+.netlify

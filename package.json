@@ -1,0 +1,38 @@
+{
+  "name": "sold",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test:pricing": "node --experimental-strip-types --test tests/browser-pricing.test.ts tests/comp-eval.test.ts",
+    "test:marketplace": "node --experimental-strip-types --test tests/marketplace-posting.test.ts tests/facebook-monitor.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.62.0",
+    "@browserbasehq/sdk": "^2.6.0",
+    "@composio/core": "^0.2.0",
+    "@langchain/core": "^1.1.0",
+    "@langchain/langgraph": "^1.0.0",
+    "@netlify/blobs": "^11.1.0",
+    "next": "^15.5.4",
+    "openai": "^7.19.0",
+    "playwright-core": "^1.55.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.0.0",
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "eslint": "^9.35.0",
+    "eslint-config-next": "^15.5.4",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2"
+  }
+}
