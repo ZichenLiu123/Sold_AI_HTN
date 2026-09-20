@@ -10,7 +10,7 @@ import {
   unpublishedMarketplacePlatforms,
 } from "@/lib/marketplace/policy";
 import { DEMO_USER, type Listing, type Platform, type PlatformConnectionStatus } from "@/lib/types";
-import { isAgentCancelled } from "@/lib/agents/cancel";
+import { isAgentCancelled, markAgentIdle, markAgentRunning } from "@/lib/agents/cancel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +21,8 @@ const inflight = new Map<string, Promise<void>>();
 async function finishPosting(id: string) {
   const current = await getListing(id);
   if (!current) return;
+  markAgentRunning(id);
+  try {
   let platform_posts;
   try {
     platform_posts = await postListing(current);
@@ -80,6 +82,9 @@ async function finishPosting(id: string) {
         ? "Facebook accepted the listing and is reviewing it. Not publicly live yet, so no email was sent."
         : "Publishing failed. No marketplace listing went live, so no email was sent."
   );
+  } finally {
+    markAgentIdle(id);
+  }
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {

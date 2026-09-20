@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
+import { isAgentRunning, stoppedListingPatch } from "./agents/cancel";
 import { attachPostUrls } from "./platforms";
 import { dataDir, isEphemeralFs } from "./storage";
 import { emptySellerProfile } from "./profile";
@@ -306,18 +307,7 @@ function mapMessage(row: MessageRow): Message {
   };
 }
 
-export function listListingsSync(): Listing[] {
-  const rows = openDb()
-    .prepare("SELECT * FROM listings ORDER BY created_at DESC")
-    .all() as ListingRow[];
-  return rows.map((row) => {
-    const listing = mappedListing(row);
-    ensureEvents(listing);
-    return mappedListing(row);
-  });
-}
-
-export function getListingSync(id: string): Listing | null {
+function loadListingSync(id: string): Listing | null {
   const row = openDb()
     .prepare("SELECT * FROM listings WHERE id = ?")
     .get(id) as ListingRow | undefined;
@@ -325,6 +315,28 @@ export function getListingSync(id: string): Listing | null {
   const listing = mappedListing(row);
   ensureEvents(listing);
   return mappedListing(row);
+}
+
+function settleStopping(listing: Listing): Listing {
+  if (!/^stopping/i.test(listing.pipeline_stage || "")) return listing;
+  if (isAgentRunning(listing.id)) return listing;
+  return updateListingSync(listing.id, stoppedListingPatch(listing)) || listing;
+}
+
+export function listListingsSync(): Listing[] {
+  const rows = openDb()
+    .prepare("SELECT * FROM listings ORDER BY created_at DESC")
+    .all() as ListingRow[];
+  return rows.map((row) => {
+    const listing = mappedListing(row);
+    ensureEvents(listing);
+    return settleStopping(mappedListing(row));
+  });
+}
+
+export function getListingSync(id: string): Listing | null {
+  const listing = loadListingSync(id);
+  return listing ? settleStopping(listing) : null;
 }
 
 export function insertListingSync(listing: Listing): Listing {
@@ -362,7 +374,7 @@ export function updateListingSync(
   id: string,
   patch: Partial<Listing>
 ): Listing | null {
-  const current = getListingSync(id);
+  const current = loadListingSync(id);
   if (!current) return null;
   const next: Listing = { ...current, ...patch };
   openDb()

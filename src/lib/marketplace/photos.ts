@@ -69,20 +69,43 @@ export async function prepareMarketplacePhoto(src: string) {
   }
 }
 
-export async function photosAlreadyOnForm(page: Page) {
+export async function photosAlreadyOnForm(page: Page, needed = 1) {
+  const visible = await countListingPhotoThumbs(page);
+  if (visible >= Math.max(1, needed)) return true;
   const body = await page.locator("body").innerText().catch(() => "");
   if (/\b([1-9]|1\d|2[0-4])\/2[45]\b/.test(body)) return true;
   if (PHOTO_EMPTY.test(body)) return false;
   const files = await page
     .locator('input[type="file"]')
     .evaluateAll((nodes) =>
-      nodes.some((node) => {
+      nodes.reduce((sum, node) => {
         const input = node as HTMLInputElement;
-        return Boolean(input.files && input.files.length > 0);
-      })
+        return sum + (input.files?.length || 0);
+      }, 0)
     )
-    .catch(() => false);
-  return files;
+    .catch(() => 0);
+  return files >= Math.max(1, needed);
+}
+
+async function countListingPhotoThumbs(page: Page) {
+  return page
+    .evaluate(() => {
+      const boxes = document.querySelectorAll(
+        ".imgbox, #image_upload .imgbox, [class*='imgbox'], .thumbnails img, [class*='MediaThumbnail'] img, [class*='photo-thumb'] img"
+      ).length;
+      const uploads = Array.from(document.querySelectorAll("img")).filter((img) => {
+        const src = img.getAttribute("src") || img.currentSrc || "";
+        const rect = img.getBoundingClientRect();
+        if (rect.width < 48 || rect.height < 48) return false;
+        return (
+          src.startsWith("blob:") ||
+          /^data:image\/(?!svg)/i.test(src) ||
+          /images\.craigslist\.org|i\.ebayimg\.com|fbcdn\.net|scontent/i.test(src)
+        );
+      }).length;
+      return Math.max(boxes, uploads);
+    })
+    .catch(() => 0);
 }
 
 export async function ebayFormGaps(page: Page) {
@@ -101,9 +124,9 @@ export async function ebayFormGaps(page: Page) {
   return [...new Set(gaps)];
 }
 
-async function waitForPhotos(page: Page, attempts = 6) {
+async function waitForPhotos(page: Page, needed = 1, attempts = 6) {
   for (let i = 0; i < attempts; i += 1) {
-    if (await photosAlreadyOnForm(page)) return true;
+    if (await photosAlreadyOnForm(page, needed)) return true;
     await page.waitForTimeout(500);
   }
   return false;
@@ -119,13 +142,13 @@ async function setFilesInPage(page: Page, files: string[]) {
       tried += 1;
       try {
         await inputs.nth(index).setInputFiles(files, { timeout: 4_000 });
-        if (await waitForPhotos(page)) return true;
+        if (await waitForPhotos(page, files.length)) return true;
       } catch {
         /* try the next input */
       }
     }
   }
-  return tried > 0 && (await photosAlreadyOnForm(page));
+  return tried > 0 && (await photosAlreadyOnForm(page, files.length));
 }
 
 async function attachViaDrop(page: Page, files: string[]) {
@@ -184,12 +207,12 @@ async function attachViaDrop(page: Page, files: string[]) {
     }, payloads)
     .catch(() => undefined);
 
-  return waitForPhotos(page);
+  return waitForPhotos(page, files.length);
 }
 
 export async function attachListingPhotos(page: Page, listing: Listing) {
   if (!listing.photos.length) return false;
-  if (await photosAlreadyOnForm(page)) return true;
+  if (await photosAlreadyOnForm(page, listing.photos.length)) return true;
   await page
     .getByRole("button", { name: /^close$/i })
     .first()
@@ -198,11 +221,12 @@ export async function attachListingPhotos(page: Page, listing: Listing) {
   const files = await listingPhotoPaths(listing);
   if (await setFilesInPage(page, files)) return true;
   if (await attachViaDrop(page, files)) return true;
-  return false;
+  return photosAlreadyOnForm(page, listing.photos.length);
 }
 
 export function armPhotoChooser(page: Page, listing: Listing) {
   const handler = async (chooser: { setFiles: (paths: string[]) => Promise<void> }) => {
+    if (await photosAlreadyOnForm(page, listing.photos.length)) return;
     const files = await listingPhotoPaths(listing);
     await chooser.setFiles(files).catch(() => undefined);
   };

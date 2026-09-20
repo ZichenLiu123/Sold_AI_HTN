@@ -16,7 +16,7 @@ import type {
   UserHints,
 } from "../types";
 import { roundClean } from "../util";
-import { clearCancel, isAgentCancelled, throwIfCancelled } from "./cancel";
+import { clearCancel, isAgentCancelled, markAgentIdle, markAgentRunning, throwIfCancelled } from "./cancel";
 
 const ListerState = Annotation.Root({
   listingId: Annotation<string>(),
@@ -230,6 +230,7 @@ const listerGraph = new StateGraph(ListerState)
 
 export async function runLister(listing: Listing): Promise<Listing> {
   clearCancel(listing.id);
+  markAgentRunning(listing.id);
   await updateListing(listing.id, {
     status: "analyzing",
     pipeline_stage: "Starting Lister Agent",
@@ -271,6 +272,8 @@ export async function runLister(listing: Listing): Promise<Listing> {
       error instanceof Error ? error.message : "Lister failed"
     );
     throw error;
+  } finally {
+    markAgentIdle(listing.id);
   }
   const next = await getListing(listing.id);
   if (!next) throw new Error("Listing disappeared during lister run");

@@ -339,7 +339,6 @@ async function fillCraigslistListing(page: Page, listing: Listing): Promise<Fill
     await fillByName(page, ["Posting title", "Title"], listing.title);
     await fillByName(page, ["Price"], String(listing.price));
     await fillByName(page, ["Posting body", "Description"], listing.description);
-    await uploadPhotos(page, listing).catch(() => false);
     if (operated.detail.includes("complete") || operated.detail.includes("Ready")) {
       return { readyToPublish: true, detail: operated.detail };
     }

@@ -13,7 +13,7 @@ import {
   startMarketplaceSession,
 } from "../marketplace/browserbase";
 import { operateListingForm } from "./operator";
-import { clearCancel, isAgentCancelled, throwIfCancelled } from "./cancel";
+import { clearCancel, isAgentCancelled, markAgentIdle, markAgentRunning, throwIfCancelled } from "./cancel";
 import { listingAlreadyTakenDown } from "./operator-decide";
 
 const working = new Set<string>();
@@ -23,6 +23,7 @@ export async function takedownListing(listing: Listing) {
     throw new Error("Sold is already taking this listing down.");
   }
   working.add(listing.id);
+  markAgentRunning(listing.id);
   clearCancel(listing.id);
   try {
     return await runTakedown(listing);
@@ -41,6 +42,7 @@ export async function takedownListing(listing: Listing) {
     throw error;
   } finally {
     working.delete(listing.id);
+    markAgentIdle(listing.id);
   }
 }
 
@@ -51,8 +53,10 @@ async function runTakedown(listing: Listing) {
         .filter(
           (post) =>
             post.platform !== "Gmail receipt" &&
-            post.status === "posted" &&
-            /^https:\/\//.test(post.remote_url || "")
+            (post.status === "posted" ||
+              post.remote_state === "live" ||
+              post.remote_state === "review" ||
+              /live on /i.test(post.detail || ""))
         )
         .map((post) => post.platform)
     ),
@@ -127,17 +131,26 @@ async function runTakedown(listing: Listing) {
     }
   }
 
+  const remainingLive = posts.filter(
+    (post) =>
+      post.platform !== "Gmail receipt" &&
+      (post.status === "posted" ||
+        post.remote_state === "live" ||
+        post.remote_state === "review")
+  );
+  const leftoverNames = remainingLive.map((post) => post.platform);
   const okNames = outcomes.filter((row) => row.ok).map((row) => row.platform);
-  const badNames = failed.map((row) => row.platform);
   await updateListing(listing.id, {
-    status: failed.length === 0 ? "rejected" : "live",
+    status: leftoverNames.length === 0 ? "rejected" : "live",
     pipeline_stage:
-      failed.length === 0
+      leftoverNames.length === 0
         ? "Taken down"
         : okNames.length
-          ? `Taken down on ${okNames.join(" and ")}. Still live on ${badNames.join(" and ")}.`
+          ? `Taken down on ${okNames.join(" and ")}. Still live on ${leftoverNames.join(" and ")}.`
           : "Take down needs another try",
-    pipeline_error: failed.length ? failed.map((row) => `${row.platform}: ${row.detail}`).join(" ") : null,
+    pipeline_error: leftoverNames.length
+      ? `Still live on ${leftoverNames.join(" and ")}.`
+      : null,
     platform_posts: posts,
   });
 

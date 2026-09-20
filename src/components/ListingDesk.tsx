@@ -10,6 +10,7 @@ import {
   facebookListingGone,
   facebookListingReview,
   formatPlatformList,
+  hasLiveMarketplace,
   listingChatReady,
   listingPublishStalled,
   missingConnectedPlatforms,
@@ -112,9 +113,13 @@ export function ListingDesk({
     };
   }, [refreshConnections]);
 
-  async function refresh() {
+  async function refresh(): Promise<Listing | null> {
     const res = await fetch(`/api/listings/${id}`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 404) {
+      router.replace("/listings");
+      return null;
+    }
     if (!res.ok) throw new Error(data.error || "Missing listing");
     setListing(data.listing);
     setMessages(data.messages || []);
@@ -126,6 +131,7 @@ export function ListingDesk({
     const started = Date.now();
     while (Date.now() - started < 300_000) {
       const current = await refresh();
+      if (!current) return null;
       if (current.status !== "posting") return current;
       if (facebookListingReview(current)) return current;
       if (current.pipeline_error) return current;
@@ -143,6 +149,7 @@ export function ListingDesk({
       const started = Date.now();
       while (Date.now() - started < 180_000) {
         const current = await refresh();
+        if (!current) return;
         if (/^stopped/i.test(current.pipeline_stage || "")) {
           return current;
         }
@@ -182,8 +189,8 @@ export function ListingDesk({
     (async () => {
       try {
         const current = await refresh();
+        if (!current || cancelled) return;
         if (
-          !cancelled &&
           !ran.current &&
           (current.status === "analyzing" || current.status === "draft") &&
           !current.title
@@ -466,12 +473,16 @@ export function ListingDesk({
     setBusy("");
   }
 
-  async function discardListing() {
-    setBusy("reject");
-    const res = await fetch(`/api/listings/${id}`, { method: "DELETE" });
+  async function discardListing(force = false) {
+    setBusy("takedown");
+    setError("");
+    const res = await fetch(`/api/listings/${id}${force ? "?force=1" : ""}`, {
+      method: "DELETE",
+    });
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
       setError(data.error || "Could not delete listing");
+      if (data.listing) setListing(data.listing);
       setBusy("");
       return;
     }
@@ -573,10 +584,11 @@ export function ListingDesk({
     stopping ||
     revising ||
     listing.status === "analyzing" ||
-    (listing.status === "posting" && !facebookReview) ||
+    (listing.status === "posting" &&
+      !facebookReview &&
+      !/^stopped/i.test(listing.pipeline_stage || "")) ||
     busy === "post" ||
     busy === "lister" ||
-    /^stopping/i.test(listing.pipeline_stage || "") ||
     /^taking down live/i.test(listing.pipeline_stage || "") ||
     /^updating live/i.test(listing.pipeline_stage || "") ||
     /^updating (facebook|craigslist|ebay)/i.test(listing.pipeline_stage || "") ||
@@ -716,14 +728,26 @@ export function ListingDesk({
           busy={busy}
           onResume={() => void resumePosting()}
         />
+      ) : listing.status === "posting" ? (
+        <PostingProgress
+          listing={listing}
+          events={events}
+          connectionStatus={connectionStatus}
+          busy={busy}
+          stopping={stopping}
+          onStop={() => void stopAgent()}
+        />
       ) : publishStalled ? (
         <UnfinishedPost
           listing={listing}
+          events={events}
           connectionStatus={connectionStatus}
           busy={busy}
           error={error}
+          stopping={stopping}
           onResume={() => void resumePosting()}
           onDiscard={discardListing}
+          onStop={() => void stopAgent()}
         />
       ) : (
         <ReviewView
@@ -789,7 +813,7 @@ function ReviewView({
   saveDraft: (edits: ListingEdits) => Promise<boolean>;
   reject: () => void;
   restore: () => void;
-  discard: () => void;
+  discard: (force?: boolean) => void;
   runLister: () => void;
   addPhotos: (files: File[]) => void;
   removePhoto: (src: string) => void;
@@ -1192,17 +1216,20 @@ function ReviewView({
                   disabled={Boolean(busy)}
                   className="h-12 rounded-full text-sm text-sold"
                 >
-                  Delete
+                  {busy === "takedown" ? "Taking down…" : "Delete"}
                 </button>
               </div>
             </>
           ) : (
             <>
               <p className="text-sm text-ink/60">
-                {/taken down/i.test(listing.pipeline_stage || "")
-                  ? "Taken down from the marketplaces. It is no longer live."
-                  : "Rejected — it never went live."}
+                {hasLiveMarketplace(listing)
+                  ? "Craigslist is down, but Facebook still looks live in Sold. Delete forever removes the ticket here even if Facebook is stuck."
+                  : /taken down/i.test(listing.pipeline_stage || "")
+                    ? "Taken down from the marketplaces. It is no longer live."
+                    : "Rejected — it never went live."}
               </p>
+              {error && <p className="mt-2 text-sm text-sold">{error}</p>}
               <button
                 type="button"
                 onClick={restore}
@@ -1213,11 +1240,11 @@ function ReviewView({
               </button>
               <button
                 type="button"
-                onClick={discard}
+                onClick={() => discard(true)}
                 disabled={Boolean(busy)}
                 className="mt-2 h-12 w-full rounded-full text-sm text-sold"
               >
-                Delete forever
+                {busy === "takedown" ? "Taking down…" : "Delete forever"}
               </button>
             </>
           )}
@@ -2012,20 +2039,74 @@ function FacebookReviewNotice({
   );
 }
 
+function PostingProgress({
+  listing,
+  events,
+  connectionStatus,
+  busy,
+  stopping,
+  onStop,
+}: {
+  listing: Listing;
+  events: AgentEvent[];
+  connectionStatus: Partial<Record<Platform, PlatformConnectionStatus>>;
+  busy: string;
+  stopping?: boolean;
+  onStop?: () => void;
+}) {
+  const pending = unpublishedMarketplacePlatforms(listing);
+  const headline =
+    pending.length > 0
+      ? `Publishing to ${formatPlatformList(pending)}.`
+      : "Publishing to marketplaces.";
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+        <p className="stamp w-fit text-sage">posting</p>
+        <h2 className="mt-3 font-serif text-3xl leading-tight">{headline}</h2>
+        <p className="mt-3 text-sm leading-relaxed text-ink/70">
+          {listing.pipeline_stage || "The operator is filling the live form. This screen updates as each marketplace posts."}
+        </p>
+        <div className="mt-5">
+          <LiveLinks
+            listing={listing}
+            connectionStatus={connectionStatus}
+            onResume={() => undefined}
+            busy={busy}
+          />
+        </div>
+        <AgentLog
+          events={events}
+          busy={busy || "post"}
+          stage={listing.pipeline_stage}
+          onStop={onStop}
+          stopping={stopping}
+        />
+      </div>
+    </div>
+  );
+}
+
 function UnfinishedPost({
   listing,
+  events,
   connectionStatus,
   busy,
   error,
+  stopping,
   onResume,
   onDiscard,
+  onStop,
 }: {
   listing: Listing;
+  events: AgentEvent[];
   connectionStatus: Partial<Record<Platform, PlatformConnectionStatus>>;
   busy: string;
   error: string;
+  stopping?: boolean;
   onResume: () => void;
   onDiscard: () => void;
+  onStop?: () => void;
 }) {
   const pending = unpublishedMarketplacePlatforms(listing);
   const attention = listing.platform_posts.filter(
@@ -2056,6 +2137,13 @@ function UnfinishedPost({
           />
         </div>
         {error && <p className="mt-3 text-sm text-sold">{error}</p>}
+        <AgentLog
+          events={events}
+          busy={busy}
+          stage={listing.pipeline_stage}
+          onStop={onStop}
+          stopping={stopping}
+        />
       </div>
       <div className="safe-bottom border-t border-line bg-card px-4 py-3">
         <button
@@ -2064,7 +2152,9 @@ function UnfinishedPost({
           disabled={Boolean(busy)}
           className="h-12 w-full rounded-full text-sm text-sold"
         >
-          {busy === "reject" ? "Deleting…" : "Delete this listing"}
+          {busy === "takedown" || busy === "reject"
+            ? "Taking down live listings…"
+            : "Delete this listing"}
         </button>
       </div>
     </div>
@@ -2161,7 +2251,10 @@ function LiveLinks({
                   ) : null;
                 })()}
             </div>
-            {!recapturing && post.status !== "posted" && post.status !== "posting" && (
+            {!recapturing &&
+              listing.status !== "posting" &&
+              post.status !== "posted" &&
+              post.status !== "posting" && (
               <button
                 type="button"
                 onClick={onResume}

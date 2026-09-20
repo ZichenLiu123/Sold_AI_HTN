@@ -83,6 +83,21 @@ test("chat stays closed until a marketplace actually posts", () => {
   };
   assert.equal(listingChatReady(unpublished), false);
   assert.equal(listingPublishStalled(unpublished), true);
+  assert.equal(
+    listingPublishStalled({
+      status: "posting",
+      platforms: ["Facebook Marketplace", "Craigslist"],
+      platform_posts: [
+        {
+          platform: "Facebook Marketplace" as const,
+          status: "posted" as const,
+          via: "browserbase" as const,
+          remote_url: "https://www.facebook.com/marketplace/item/1",
+        },
+      ],
+    }),
+    false
+  );
   assert.equal(hasPostedMarketplace(unpublished), false);
   assert.equal(
     listingChatReady({

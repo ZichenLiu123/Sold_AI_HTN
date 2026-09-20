@@ -8,7 +8,7 @@ import { DEMO_USER } from "../types";
 import { getMarketplaceAdapter } from "../marketplace/adapters";
 import { isLocalConnection, localPage, withLocalChrome } from "../marketplace/local-browser";
 import { operateListingForm } from "./operator";
-import { clearCancel, isAgentCancelled, throwIfCancelled } from "./cancel";
+import { clearCancel, isAgentCancelled, markAgentIdle, markAgentRunning, throwIfCancelled } from "./cancel";
 import {
   releaseSoldSessions,
   remoteMinutesExhausted,
@@ -70,6 +70,7 @@ export async function reviseListing(listing: Listing, input: ListingRevise | str
     throw new Error("Sold is already updating this live listing.");
   }
   revising.add(listing.id);
+  markAgentRunning(listing.id);
   clearCancel(listing.id);
   try {
     const edits =
@@ -94,6 +95,7 @@ export async function reviseListing(listing: Listing, input: ListingRevise | str
     throw error;
   } finally {
     revising.delete(listing.id);
+    markAgentIdle(listing.id);
   }
 }
 

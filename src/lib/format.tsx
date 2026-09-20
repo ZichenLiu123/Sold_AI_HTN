@@ -33,6 +33,7 @@ export function floorCaption(listing: Listing): string {
     if (names.length > 2) return `Live on ${names.length} marketplaces`;
     return "Live";
   }
+  if (/^stopped/i.test(listing.pipeline_stage || "")) return "Stopped";
   if (listing.status === "posting") {
     return facebookListingReview(listing)
       ? "Facebook is reviewing it"

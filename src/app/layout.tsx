@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans, Fraunces, IBM_Plex_Mono, Instrument_Serif } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
-import { Shell } from "@/components/Shell";
+import { LlmWarning } from "@/components/LlmWarning";
 import { SoldMark } from "@/components/SoldMark";
+import { TabBar } from "@/components/TabBar";
 
 const serif = Instrument_Serif({
   weight: "400",
@@ -60,7 +62,20 @@ export default function RootLayout({
       >
         <div className="sold-frame flex w-full justify-center bg-ink">
           <div className="app-shell relative flex w-full max-w-[430px] flex-col overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.45)]">
-            <Shell brand={<SoldMark />}>{children}</Shell>
+            <header className="sold-header safe-top z-20 shrink-0 border-b border-line/80 bg-paper/90 backdrop-blur">
+              <div className="flex items-center justify-between px-4 py-3">
+                <SoldMark />
+                <Link
+                  href="/platforms"
+                  className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/55"
+                >
+                  Accounts
+                </Link>
+              </div>
+              <LlmWarning />
+            </header>
+            <main className="sold-main flex min-h-0 flex-1 flex-col">{children}</main>
+            <TabBar />
           </div>
         </div>
       </body>

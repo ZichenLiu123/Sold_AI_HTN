@@ -139,6 +139,8 @@ export function listingPublishStalled(listing: {
   status: string;
   platforms?: readonly Platform[];
   platform_posts: PlatformPost[];
+  pipeline_stage?: string;
+  pipeline_error?: string | null;
 }): boolean {
   if (listingChatReady(listing)) return false;
   if (facebookListingReview(listing) && unpublishedMarketplacePlatforms({
@@ -146,6 +148,12 @@ export function listingPublishStalled(listing: {
     platform_posts: listing.platform_posts,
   }).length === 0) {
     return false;
+  }
+  if (listing.status === "posting") {
+    const failed =
+      Boolean(listing.pipeline_error) ||
+      /fail/i.test(listing.pipeline_stage || "");
+    if (!failed) return false;
   }
   if (
     listing.status !== "live" &&
