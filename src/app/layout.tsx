@@ -47,15 +47,16 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   themeColor: "#efe4d4",
+  interactiveWidget: "resizes-visual",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="h-full">
       <body
-        className={`${serif.variable} ${logo.variable} ${sans.variable} ${mono.variable} font-sans antialiased`}
+        className={`${serif.variable} ${logo.variable} ${sans.variable} ${mono.variable} h-full font-sans antialiased`}
       >
         <Shell brand={<SoldMark />}>{children}</Shell>
       </body>

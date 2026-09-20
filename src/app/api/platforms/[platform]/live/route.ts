@@ -36,7 +36,7 @@ export async function GET(
       <h1 style="font-family:Georgia,serif;font-size:1.8rem;font-weight:500">Browserbase didn’t open login</h1>
       <p style="opacity:.7">${message}</p>
       <p style="margin-top:1.25rem">
-        <a href="/api/platforms/${slug}/live" style="display:inline-block;background:#1c1917;color:#f6f1e8;text-decoration:none;border-radius:999px;padding:.75rem 1.1rem;font-size:.85rem">Try again</a>
+        <a href="/platforms" style="display:inline-block;background:#1c1917;color:#f6f1e8;text-decoration:none;border-radius:999px;padding:.75rem 1.1rem;font-size:.85rem">Back to accounts</a>
       </p>
     </main>
   </body>

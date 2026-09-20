@@ -30,8 +30,8 @@ export function Shell({
   }, []);
 
   return (
-    <div className="flex h-dvh justify-center bg-ink">
-      <div className="app-shell relative flex h-dvh w-full max-w-[430px] flex-col overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.45)]">
+    <div className="sold-frame flex w-full justify-center bg-ink">
+      <div className="app-shell relative flex w-full max-w-[430px] flex-col overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.45)]">
         <header className="sold-header safe-top z-20 shrink-0 border-b border-line/80 bg-paper/90 backdrop-blur">
           <div className="flex items-center justify-between px-4 py-3">
             {brand}

@@ -18,15 +18,21 @@ function usesLocalLogin(platform: string) {
   return platform === "Facebook Marketplace" || platform === "eBay";
 }
 
-function loginWindowName(platform: string) {
-  return `sold-login-${platformSlug(platform)}`;
-}
-
 function liveLoginPath(platform: string, fresh = false) {
   return `/api/platforms/${platformSlug(platform)}/live${fresh ? "?fresh=1" : ""}`;
 }
 
-function accountHint(connection: Connection, connected: boolean, waiting: boolean) {
+function onPhone() {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+function accountHint(
+  connection: Connection,
+  connected: boolean,
+  waiting: boolean,
+  hosted: boolean
+) {
   if (connected) {
     return (
       connection.metadata.evidence ||
@@ -34,48 +40,23 @@ function accountHint(connection: Connection, connected: boolean, waiting: boolea
     );
   }
   if (waiting) {
-    return usesLocalLogin(connection.platform)
-      ? "Finish login in the window that opened. Sold marks this connected and starts watching by itself."
-      : "Finish login in the window that opened, then tap check if Sold hasn’t caught up.";
+    if (hosted) {
+      return "Finish login in the live browser tab, come back here, then tap I finished logging in.";
+    }
+    if (usesLocalLogin(connection.platform) || onPhone()) {
+      return "Chrome opened on the computer running Sold — not on this phone. Log in there, then tap I finished logging in.";
+    }
+    return "Finish login in the window that opened, then tap I finished logging in.";
+  }
+  if (hosted) {
+    return "Opens a live browser tab so you can log in from this phone.";
   }
   return "Log in once. Sold starts watching after that.";
 }
 
-function popupHtml(platform: string, title: string, body: string) {
-  const href = liveLoginPath(platform);
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>${title}</title>
-  </head>
-  <body style="margin:0;background:#f6f1e8;color:#1c1917;font:16px/1.45 ui-sans-serif,system-ui,sans-serif">
-    <main style="max-width:28rem;margin:20vh auto;padding:0 1.5rem">
-      <p style="letter-spacing:.18em;text-transform:uppercase;font:11px ui-monospace,monospace;opacity:.5">Sold</p>
-      <h1 style="font-family:Georgia,serif;font-size:1.8rem;font-weight:500">${title}</h1>
-      <p id="status" style="opacity:.7">${body} If this tab does not switch, use the link:</p>
-      <p style="margin-top:1.25rem">
-        <a href="${href}" style="display:inline-block;background:#1c1917;color:#f6f1e8;text-decoration:none;border-radius:999px;padding:.75rem 1.1rem;font-size:.85rem">Open live login</a>
-      </p>
-    </main>
-  </body>
-</html>`;
-}
-
-function writePopup(
-  popup: Window | null,
-  platform: string,
-  title: string,
-  body: string
-) {
-  if (!popup) return;
-  popup.document.open();
-  popup.document.write(popupHtml(platform, title, body));
-  popup.document.close();
-}
-
-export function PlatformAccounts() {
+export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [cloudHost, setCloudHost] = useState(hosted);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -84,6 +65,7 @@ export function PlatformAccounts() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Could not load accounts.");
     setConnections(data.connections);
+    if (typeof data.hosted === "boolean") setCloudHost(data.hosted);
   }
 
   useEffect(() => {
@@ -124,55 +106,25 @@ export function PlatformAccounts() {
     void watchLocalLogin(connection.platform);
   }
 
-  async function connectRemote(connection: Connection) {
-    const popup = window.open("about:blank", loginWindowName(connection.platform));
-    writePopup(
-      popup,
-      connection.platform,
-      `Opening ${connection.platform}`,
-      "Hang on — this tab will switch to the live login as soon as it’s ready."
-    );
-    const response = await fetch(
-      `/api/platforms/${platformSlug(connection.platform)}/connect`,
-      { method: "POST" }
-    );
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Could not open login.");
-    setConnections((current) =>
-      current.map((item) => (item.platform === data.platform ? data : item))
-    );
-    if (data.live_url) {
-      if (popup) popup.location.replace(data.live_url);
-      else window.open(data.live_url, "_blank", "noopener,noreferrer");
+  function connect(connection: Connection) {
+    setError("");
+    if (cloudHost) {
+      window.location.assign(liveLoginPath(connection.platform, true));
       return;
     }
-    writePopup(
-      popup,
-      connection.platform,
-      "Login window missing",
-      "The login browser did not return a live view. Close this tab and press Connect again."
-    );
-    throw new Error("The login window opened, but no live view came back. Press Connect again.");
-  }
-
-  async function connect(connection: Connection) {
     setBusy(connection.platform);
-    setError("");
-    try {
-      if (usesLocalLogin(connection.platform)) {
-        await connectLocal(connection);
-        return;
-      }
+    void (async () => {
       try {
-        await connectRemote(connection);
-      } catch {
-        await connectLocal(connection);
+        if (usesLocalLogin(connection.platform)) {
+          await connectLocal(connection);
+          return;
+        }
+        window.location.assign(liveLoginPath(connection.platform, true));
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Could not open login.");
+        setBusy("");
       }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not open login.");
-    } finally {
-      setBusy("");
-    }
+    })();
   }
 
   async function disconnect(connection: Connection) {
@@ -231,7 +183,7 @@ export function PlatformAccounts() {
                 </span>
               </div>
               <p className="mt-1 text-sm text-ink/60">
-                {accountHint(connection, connected, waiting)}
+                {accountHint(connection, connected, waiting, cloudHost)}
               </p>
               {connection.error && <p className="mt-2 text-xs text-sold">{connection.error}</p>}
               {connected ? (
@@ -248,7 +200,7 @@ export function PlatformAccounts() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => void connect(connection)}
+                  onClick={() => connect(connection)}
                   disabled={Boolean(busy)}
                   className="mt-3 h-10 w-full rounded-full bg-ink px-3 text-xs text-paper disabled:opacity-50"
                 >

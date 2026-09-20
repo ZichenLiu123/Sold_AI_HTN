@@ -488,7 +488,7 @@ export function ListingDesk({
         : listing.status;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden" data-listing>
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" data-listing>
       <div className="flex shrink-0 items-center gap-2 border-b border-line bg-paper/95 px-3 py-2 backdrop-blur">
         {chatReady && threadId ? (
           <button

@@ -6,6 +6,7 @@ import { getMarketplaceAdapter } from "./adapters";
 import type { Platform } from "../types";
 import { platformSlug } from "../platforms";
 import { browserbaseRetryDelay, existingContextId, isRemoteMinutesError } from "./rate-limit";
+import { isEphemeralFs } from "../storage";
 
 // Browserbase session helpers for marketplace login and posting.
 
@@ -115,7 +116,9 @@ function describeBrowserbaseError(error: unknown) {
   if (isRemoteMinutesError(error)) {
     markRemoteMinutesExhausted();
     return new Error(
-      "The remote Craigslist browser is out of minutes. Sold will use Chrome on this Mac."
+      isEphemeralFs()
+        ? "The remote browser is out of minutes. Connect from Sold on the laptop instead."
+        : "The remote Craigslist browser is out of minutes. Sold will use Chrome on this Mac."
     );
   }
   if (/429|burst rate/i.test(message)) {
@@ -200,7 +203,9 @@ export async function startMarketplaceSession(
 ) {
   if (remoteMinutesExhausted()) {
     throw new Error(
-      "The remote Craigslist browser is out of minutes. Sold will use Chrome on this Mac."
+      isEphemeralFs()
+        ? "The remote browser is out of minutes. Connect from Sold on the laptop instead."
+        : "The remote Craigslist browser is out of minutes. Sold will use Chrome on this Mac."
     );
   }
   const timeoutMs = options?.timeoutMs ?? 18_000;
