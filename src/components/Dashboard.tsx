@@ -5,8 +5,8 @@ import type { Listing } from "@/lib/types";
 export function Dashboard({ listings = [] }: { listings: Listing[] }) {
   if (listings.length === 0) {
     return (
-      <div className="flex min-h-[70dvh] flex-col justify-end px-5 pb-4">
-        <p className="stamp w-fit text-sold">empty</p>
+      <div className="flex min-h-full flex-1 flex-col items-center justify-center px-5 text-center">
+        <p className="stamp text-sold">empty</p>
         <h1 className="mt-5 font-serif text-[2.6rem] leading-[0.95]">
           No listings yet.
         </h1>
@@ -16,7 +16,7 @@ export function Dashboard({ listings = [] }: { listings: Listing[] }) {
         </p>
         <Link
           href="/new"
-          className="mt-8 flex h-14 items-center justify-center rounded-full bg-sold text-paper"
+          className="mt-8 flex h-14 w-full max-w-xs items-center justify-center rounded-full bg-sold text-paper"
         >
           Open the camera
         </Link>

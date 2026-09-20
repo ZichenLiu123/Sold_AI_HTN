@@ -1,8 +1,5 @@
-import { Dashboard } from "@/components/Dashboard";
-import { listListings } from "@/lib/db";
+import { Hero } from "@/components/Hero";
 
-export const dynamic = "force-dynamic";
-
-export default async function HomePage() {
-  return <Dashboard listings={await listListings()} />;
+export default function HomePage() {
+  return <Hero />;
 }

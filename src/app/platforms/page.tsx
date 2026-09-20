@@ -16,7 +16,7 @@ export default function PlatformsPage() {
       </p>
       <PlatformAccounts />
       <Link
-        href="/"
+        href="/listings"
         className="mt-6 flex h-14 items-center justify-center rounded-full bg-ink text-paper"
       >
         Back to listings

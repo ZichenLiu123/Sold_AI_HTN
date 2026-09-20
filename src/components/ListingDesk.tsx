@@ -368,7 +368,7 @@ export function ListingDesk({
       setBusy("");
       return;
     }
-    router.push("/");
+    router.push("/listings");
   }
 
   async function restoreListing() {
@@ -392,7 +392,7 @@ export function ListingDesk({
       setBusy("");
       return;
     }
-    router.push("/");
+    router.push("/listings");
   }
 
   async function removePhoto(src: string) {
@@ -510,7 +510,7 @@ export function ListingDesk({
           </button>
         ) : (
           <Link
-            href="/"
+            href="/listings"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-wash text-lg"
             aria-label="Back to listings"
           >

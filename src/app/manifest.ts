@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Sold",
     short_name: "Sold",
-    description: "Photograph something. Agents write the listing and negotiate.",
+    description: "Snap a photo. Agents write it, price it, post it, and answer the buyer.",
     start_url: "/",
     display: "standalone",
     background_color: "#efe4d4",

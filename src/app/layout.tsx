@@ -30,7 +30,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Sold",
-  description: "Photograph it. Agents list it and talk to the buyer.",
+  description: "Snap a photo. Agents write it, price it, post it, and answer the buyer.",
   applicationName: "Sold",
   appleWebApp: {
     capable: true,

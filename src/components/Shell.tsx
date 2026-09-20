@@ -60,7 +60,7 @@ function TabBar({ pathname }: { pathname: string }) {
   return (
     <nav className="tab-bar safe-bottom absolute inset-x-0 bottom-0 z-30 w-full border-t border-line bg-card/95 backdrop-blur">
       <div className="grid grid-cols-3 items-end px-2 pt-2">
-        <Tab href="/" label="Listings" active={pathname === "/"} />
+        <Tab href="/listings" label="Listings" active={pathname === "/listings"} />
         <Link
           href="/new"
           className="-mt-7 mb-1 flex flex-col items-center justify-center"
