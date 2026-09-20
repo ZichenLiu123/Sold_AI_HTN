@@ -54,11 +54,15 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="h-full" suppressHydrationWarning>
       <body
         className={`${serif.variable} ${logo.variable} ${sans.variable} ${mono.variable} h-full font-sans antialiased`}
       >
-        <Shell brand={<SoldMark />}>{children}</Shell>
+        <div className="sold-frame flex w-full justify-center bg-ink">
+          <div className="app-shell relative flex w-full max-w-[430px] flex-col overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.45)]">
+            <Shell brand={<SoldMark />}>{children}</Shell>
+          </div>
+        </div>
       </body>
     </html>
   );

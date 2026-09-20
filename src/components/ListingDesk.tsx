@@ -57,6 +57,8 @@ export function ListingDesk({
   const [sender, setSender] = useState<"buyer" | "human">("buyer");
   const [busy, setBusy] = useState("");
   const [revising, setRevising] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [watchOn, setWatchOn] = useState(true);
   const [error, setError] = useState("");
   const [sheet, setSheet] = useState<"none" | "activity" | "ticket">("none");
   const [connectionStatus, setConnectionStatus] = useState<
@@ -120,6 +122,19 @@ export function ListingDesk({
     return data.listing as Listing;
   }
 
+  async function pollUntilPosted() {
+    const started = Date.now();
+    while (Date.now() - started < 300_000) {
+      const current = await refresh();
+      if (current.status !== "posting") return current;
+      if (facebookListingReview(current)) return current;
+      if (current.pipeline_error) return current;
+      if (/^stopped/i.test(current.pipeline_stage || "")) return current;
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
+    }
+    return refresh();
+  }
+
   async function runLister(force = false) {
     setBusy("lister");
     setError("");
@@ -128,6 +143,9 @@ export function ListingDesk({
       const started = Date.now();
       while (Date.now() - started < 180_000) {
         const current = await refresh();
+        if (/^stopped/i.test(current.pipeline_stage || "")) {
+          return current;
+        }
         if (
           terminal.has(current.status) &&
           (current.title || current.status === "error" || current.pipeline_error)
@@ -230,7 +248,14 @@ export function ListingDesk({
   );
 
   useEffect(() => {
-    if (!listing) return;
+    fetch("/api/monitor/facebook", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => setWatchOn(data.enabled !== false))
+      .catch(() => undefined);
+  }, [listing?.id]);
+
+  useEffect(() => {
+    if (!listing || !watchOn) return;
     const watching =
       listingChatReady(listing) || facebookListingReview(listing);
     if (!watching) return;
@@ -239,7 +264,23 @@ export function ListingDesk({
     }, 8_000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listing?.id, listing?.status, facebookLive]);
+  }, [listing?.id, listing?.status, facebookLive, watchOn]);
+
+  useEffect(() => {
+    if (!listing) return;
+    const streaming =
+      stopping ||
+      (listing.status === "posting" && !facebookListingReview(listing)) ||
+      listing.status === "analyzing" ||
+      busy === "post" ||
+      busy === "lister";
+    if (!streaming) return;
+    const timer = window.setInterval(() => {
+      void refresh().catch(() => undefined);
+    }, 800);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing?.id, listing?.status, busy]);
 
   const chips = useMemo(() => {
     if (!listing?.price) return [];
@@ -287,6 +328,11 @@ export function ListingDesk({
         floor_price: edits.floor_price,
       }),
     });
+    if (res.status === 202) {
+      await pollUntilPosted();
+      setBusy("");
+      return;
+    }
     const data = await res.json();
     if (!res.ok) setError(data.error || "Post failed");
     await refresh();
@@ -331,9 +377,46 @@ export function ListingDesk({
     setBusy("post");
     setError("");
     const res = await fetch(`/api/listings/${id}/post`, { method: "POST" });
+    if (res.status === 202) {
+      await pollUntilPosted();
+      setBusy("");
+      return;
+    }
     const data = await res.json();
     if (!res.ok) setError(data.error || "Could not resume posting");
     await refresh();
+    setBusy("");
+  }
+
+  async function stopAgent() {
+    if (!listing || stopping) return;
+    setStopping(true);
+    setBusy(listing.status === "analyzing" ? "lister" : listing.status === "posting" ? "post" : busy);
+    try {
+      const res = await fetch(`/api/listings/${id}/cancel`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not stop the agent");
+        setStopping(false);
+        return;
+      }
+      setListing(data);
+    } catch {
+      setError("Could not stop the agent");
+      setStopping(false);
+      return;
+    }
+    if (listing.status === "posting") await pollUntilPosted();
+    else {
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 400));
+        const next = await refresh();
+        if (next && !["analyzing", "posting"].includes(next.status) && !/stopping/i.test(next.pipeline_stage || "")) {
+          break;
+        }
+      }
+    }
+    setStopping(false);
     setBusy("");
   }
 
@@ -486,6 +569,18 @@ export function ListingDesk({
       : publishStalled
         ? "failed"
         : listing.status;
+  const agentRunning =
+    stopping ||
+    revising ||
+    listing.status === "analyzing" ||
+    (listing.status === "posting" && !facebookReview) ||
+    busy === "post" ||
+    busy === "lister" ||
+    /^stopping/i.test(listing.pipeline_stage || "") ||
+    /^taking down live/i.test(listing.pipeline_stage || "") ||
+    /^updating live/i.test(listing.pipeline_stage || "") ||
+    /^updating (facebook|craigslist|ebay)/i.test(listing.pipeline_stage || "") ||
+    /^still opening /i.test(listing.pipeline_stage || "");
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" data-listing>
@@ -536,6 +631,16 @@ export function ListingDesk({
             {active ? ` · ${active.buyer_name}` : showChats ? " · chats" : ""}
           </p>
         </button>
+        {agentRunning && (
+          <button
+            type="button"
+            onClick={() => void stopAgent()}
+            disabled={stopping}
+            className="shrink-0 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-sold"
+          >
+            {stopping || /stopping/i.test(listing.pipeline_stage || "") ? "Stopping…" : "Stop"}
+          </button>
+        )}
         <span
           className={`stamp shrink-0 px-1.5 py-1 text-[8px] ${
             stamp === "sold"
@@ -578,7 +683,7 @@ export function ListingDesk({
           send={send}
           chatEnd={chatEnd}
           onActivity={() => setSheet("activity")}
-          watchingFacebook={facebookLive && !facebookGone}
+          watchingFacebook={watchOn && facebookLive && !facebookGone}
           facebookGone={facebookGone}
         />
       ) : chatReady && showChats ? (
@@ -601,6 +706,8 @@ export function ListingDesk({
           onRevised={(next) => setListing(next)}
           onWorking={setRevising}
           onOpenChats={openChats}
+          onStop={() => void stopAgent()}
+          stopping={stopping}
         />
       ) : facebookReview ? (
         <FacebookReviewNotice
@@ -633,6 +740,8 @@ export function ListingDesk({
           runLister={() => void runLister(true)}
           addPhotos={addPhotos}
           removePhoto={removePhoto}
+          onStop={() => void stopAgent()}
+          stopping={stopping}
         />
       )}
 
@@ -668,6 +777,8 @@ function ReviewView({
   runLister,
   addPhotos,
   removePhoto,
+  onStop,
+  stopping,
 }: {
   listing: Listing;
   events: AgentEvent[];
@@ -682,6 +793,8 @@ function ReviewView({
   runLister: () => void;
   addPhotos: (files: File[]) => void;
   removePhoto: (src: string) => void;
+  onStop?: () => void;
+  stopping?: boolean;
 }) {
   const editable =
     listing.status === "ready" ||
@@ -980,7 +1093,13 @@ function ReviewView({
               )}
             </div>
           )}
-          <AgentLog events={events} busy={busy} stage={listing.pipeline_stage} />
+          <AgentLog
+            events={events}
+            busy={busy}
+            stage={listing.pipeline_stage}
+            onStop={onStop}
+            stopping={stopping}
+          />
           {listing.status === "error" && (
             <div className="mt-4">
               <p className="text-sold">{listing.pipeline_error}</p>
@@ -1236,6 +1355,8 @@ function LiveListingView({
   onRevised,
   onWorking,
   onOpenChats,
+  onStop,
+  stopping,
 }: {
   listing: Listing;
   events: AgentEvent[];
@@ -1248,6 +1369,8 @@ function LiveListingView({
   onRevised: (listing: Listing) => void;
   onWorking?: (working: boolean) => void;
   onOpenChats: () => void;
+  onStop?: () => void;
+  stopping?: boolean;
 }) {
   const buyerCount = threads.filter((thread) => !thread.demo || thread.last).length;
   const [title, setTitle] = useState(listing.title);
@@ -1499,7 +1622,13 @@ function LiveListingView({
           </span>
           <span className="text-ink/40">→</span>
         </button>
-        <AgentLog events={events} busy={busy || (saving ? "revise" : takingDown ? "takedown" : "")} stage={listing.pipeline_stage} />
+        <AgentLog
+          events={events}
+          busy={busy || (saving ? "revise" : takingDown ? "takedown" : "")}
+          stage={listing.pipeline_stage}
+          onStop={onStop}
+          stopping={stopping}
+        />
       </div>
       <div className="safe-bottom border-t border-line bg-card px-4 py-3">
         {editing ? (
@@ -2090,14 +2219,26 @@ function AgentLog({
   events,
   busy,
   stage,
+  onStop,
+  stopping,
 }: {
   events: AgentEvent[];
   busy: string;
   stage?: string;
+  onStop?: () => void;
+  stopping?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const end = useRef<HTMLDivElement | null>(null);
   const working = Boolean(busy);
   useNow(working);
+  useEffect(() => {
+    if (working) setExpanded(true);
+  }, [working]);
+  useEffect(() => {
+    if (!expanded) return;
+    end.current?.scrollIntoView({ block: "nearest" });
+  }, [events.length, expanded]);
   const age = workAgeMs(events);
   const stuck = working && age >= STUCK_AFTER_MS;
   const latest = events.at(-1);
@@ -2140,6 +2281,26 @@ function AgentLog({
             {summary}
           </span>
         </span>
+        {onStop && working && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!stopping) onStop();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              event.stopPropagation();
+              if (!stopping) onStop();
+            }}
+            className="shrink-0 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-sold"
+          >
+            {stopping || /stopping/i.test(stage || "") ? "Stopping…" : "Stop"}
+          </span>
+        )}
         <span
           aria-hidden="true"
           className={`shrink-0 text-sm text-ink/45 transition-transform ${expanded ? "rotate-180" : ""}`}
@@ -2150,6 +2311,7 @@ function AgentLog({
       {expanded && (
         <div id="agent-log-events" className="border-t border-line px-3 pb-3">
           <ActivityList events={events} busy={busy} compact />
+          <div ref={end} />
         </div>
       )}
     </section>

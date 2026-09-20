@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getListing } from "@/lib/db";
 import { hasListingEdits, reviseListing, type ListingRevise } from "@/lib/agents/revise";
 import { listingChatReady } from "@/lib/marketplace/policy";
+import { isAgentCancelled } from "@/lib/agents/cancel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const result = await reviseListing(listing, edits || prompt);
     return NextResponse.json(result);
   } catch (error) {
+    if (isAgentCancelled(error)) {
+      return NextResponse.json({ listing: await getListing(id), detail: "Stopped." });
+    }
     return NextResponse.json(
       {
         error:

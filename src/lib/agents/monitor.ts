@@ -54,10 +54,12 @@ import {
   startMarketplaceSession,
 } from "../marketplace/browserbase";
 import { getMarketplaceAdapter } from "../marketplace/adapters";
+import { inboxWatchEnabled, setInboxWatchEnabled } from "../inbox-watch";
 
 const TICK_MS = 75_000;
 
 export type FacebookMonitorStatus = {
+  enabled: boolean;
   running: boolean;
   ticking: boolean;
   interval_ms: number;
@@ -92,6 +94,7 @@ function status(patch: Partial<FacebookMonitorStatus> = {}): FacebookMonitorStat
     removed: 0,
     ...memory.soldFbStatus,
     ...patch,
+    enabled: inboxWatchEnabled(),
     running: Boolean(memory.soldFbMonitor),
     ticking: Boolean(memory.soldFbTick),
   };
@@ -918,6 +921,9 @@ async function tickEbayInbox(): Promise<string | undefined> {
 }
 
 export async function tickAllInboxes(): Promise<FacebookMonitorStatus> {
+  if (!inboxWatchEnabled()) {
+    return status({ last_summary: "Inbox watch is off." });
+  }
   if (memory.soldInboxTick) return memory.soldInboxTick;
   const run = (async () => {
     try {
@@ -966,6 +972,7 @@ export async function tickAllInboxes(): Promise<FacebookMonitorStatus> {
 }
 
 export function startFacebookMonitor(options?: { immediate?: boolean }) {
+  setInboxWatchEnabled(true);
   if (!memory.soldFbMonitor) {
     memory.soldFbMonitor = setInterval(() => {
       void tickAllInboxes();
@@ -995,6 +1002,9 @@ export function startFacebookMonitor(options?: { immediate?: boolean }) {
 }
 
 export async function ensureBackgroundFacebookMonitor() {
+  if (!inboxWatchEnabled()) {
+    return status({ last_summary: "Inbox watch is off." });
+  }
   if (memory.soldFbMonitor) return facebookMonitorStatus();
   const listings = await listListings();
   const facebook = await getPlatformConnection(DEMO_USER.id, "Facebook Marketplace");
@@ -1030,7 +1040,10 @@ export async function ensureBackgroundFacebookMonitor() {
   return startFacebookMonitor({ immediate: true });
 }
 
-export function stopFacebookMonitor() {
+export function stopFacebookMonitor(options?: { persist?: boolean }) {
+  if (options?.persist !== false) {
+    setInboxWatchEnabled(false);
+  }
   if (memory.soldFbMonitor) {
     clearInterval(memory.soldFbMonitor);
     memory.soldFbMonitor = undefined;
@@ -1039,5 +1052,9 @@ export function stopFacebookMonitor() {
     clearTimeout(memory.soldFbWarmup);
     memory.soldFbWarmup = undefined;
   }
-  return status({ last_summary: "Stopped watching inboxes." });
+  return status({
+    last_summary: inboxWatchEnabled()
+      ? "Stopped watching inboxes."
+      : "Inbox watch is off.",
+  });
 }

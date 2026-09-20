@@ -16,6 +16,7 @@ import type {
   UserHints,
 } from "../types";
 import { roundClean } from "../util";
+import { clearCancel, isAgentCancelled, throwIfCancelled } from "./cancel";
 
 const ListerState = Annotation.Root({
   listingId: Annotation<string>(),
@@ -36,6 +37,7 @@ const ListerState = Annotation.Root({
 });
 
 async function visionNode(state: typeof ListerState.State) {
+  throwIfCancelled(state.listingId);
   await updateListing(state.listingId, {
     pipeline_stage: "Reading the photos",
     status: "analyzing",
@@ -47,6 +49,7 @@ async function visionNode(state: typeof ListerState.State) {
     "Looking at the photos to fill brand, model, and condition."
   );
   const attributes = await extractAttributes(state.photos, state.hints);
+  throwIfCancelled(state.listingId);
   const previous = await getListing(state.listingId);
   if (!attributes.brand && previous?.attributes?.brand) {
     attributes.brand = previous.attributes.brand;
@@ -69,6 +72,7 @@ async function visionNode(state: typeof ListerState.State) {
 }
 
 async function compsNode(state: typeof ListerState.State) {
+  throwIfCancelled(state.listingId);
   await updateListing(state.listingId, {
     pipeline_stage: "Checking comps across marketplaces",
   });
@@ -113,6 +117,7 @@ async function compsNode(state: typeof ListerState.State) {
       );
     },
     onSource: async (name, found, reason) => {
+      throwIfCancelled(state.listingId);
       await updateListing(state.listingId, {
         pipeline_stage: `Comps: ${name} ${found > 0 ? `found ${found}` : "had no usable hits"}`,
       });
@@ -170,6 +175,7 @@ async function compsNode(state: typeof ListerState.State) {
 }
 
 async function copyNode(state: typeof ListerState.State) {
+  throwIfCancelled(state.listingId);
   await updateListing(state.listingId, {
     pipeline_stage: "Writing the listing",
   });
@@ -187,6 +193,7 @@ async function copyNode(state: typeof ListerState.State) {
     state.hints,
     state.comps
   );
+  throwIfCancelled(state.listingId);
   const price = generated.suggested_price;
   const floor = roundClean(price * 0.8);
   await updateListing(state.listingId, {
@@ -222,6 +229,7 @@ const listerGraph = new StateGraph(ListerState)
   .compile();
 
 export async function runLister(listing: Listing): Promise<Listing> {
+  clearCancel(listing.id);
   await updateListing(listing.id, {
     status: "analyzing",
     pipeline_stage: "Starting Lister Agent",
@@ -240,6 +248,17 @@ export async function runLister(listing: Listing): Promise<Listing> {
       hints: listing.hints,
     });
   } catch (error) {
+    if (isAgentCancelled(error)) {
+      const latest = await getListing(listing.id);
+      await updateListing(listing.id, {
+        status: latest?.title ? "ready" : "draft",
+        pipeline_stage: "Stopped",
+        pipeline_error: null,
+      });
+      await logAgent(listing.id, "lister", "STOPPED", "You stopped the lister.");
+      clearCancel(listing.id);
+      return (await getListing(listing.id)) || listing;
+    }
     await updateListing(listing.id, {
       status: "error",
       pipeline_stage: "Failed",

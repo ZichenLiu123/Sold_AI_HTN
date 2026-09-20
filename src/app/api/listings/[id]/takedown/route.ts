@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getListing } from "@/lib/db";
 import { takedownListing } from "@/lib/agents/takedown";
+import { isAgentCancelled } from "@/lib/agents/cancel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     const result = await takedownListing(listing);
     return NextResponse.json(result);
   } catch (error) {
+    if (isAgentCancelled(error)) {
+      return NextResponse.json({ listing: await getListing(id), detail: "Stopped." });
+    }
     const message =
       error instanceof Error ? error.message : "Could not take the listing down.";
     return NextResponse.json(

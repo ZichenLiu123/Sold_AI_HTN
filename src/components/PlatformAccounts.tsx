@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { InboxWatchToggle } from "@/components/InboxWatchToggle";
 import { platformSlug } from "@/lib/platforms";
 import type { PlatformConnection } from "@/lib/types";
 
@@ -169,6 +170,7 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
 
   return (
     <>
+      <InboxWatchToggle />
       {error && <p className="mt-4 rounded-xl bg-wash px-3 py-2 text-sm text-sold">{error}</p>}
       <ul className="mt-6 space-y-3">
         {connections.map((connection) => {

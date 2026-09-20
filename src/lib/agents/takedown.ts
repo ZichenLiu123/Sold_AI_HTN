@@ -13,6 +13,7 @@ import {
   startMarketplaceSession,
 } from "../marketplace/browserbase";
 import { operateListingForm } from "./operator";
+import { clearCancel, isAgentCancelled, throwIfCancelled } from "./cancel";
 import { listingAlreadyTakenDown } from "./operator-decide";
 
 const working = new Set<string>();
@@ -22,8 +23,22 @@ export async function takedownListing(listing: Listing) {
     throw new Error("Sold is already taking this listing down.");
   }
   working.add(listing.id);
+  clearCancel(listing.id);
   try {
     return await runTakedown(listing);
+  } catch (error) {
+    if (isAgentCancelled(error)) {
+      await updateListing(listing.id, {
+        pipeline_stage: "Stopped",
+        pipeline_error: null,
+      });
+      await logAgent(listing.id, "browser", "STOPPED", "You stopped the take-down.");
+      return {
+        listing: (await getListing(listing.id))!,
+        detail: "Stopped.",
+      };
+    }
+    throw error;
   } finally {
     working.delete(listing.id);
   }
@@ -67,12 +82,14 @@ async function runTakedown(listing: Listing) {
 
   const outcomes: { platform: Platform; ok: boolean; detail: string }[] = [];
   for (const platform of platforms) {
+    throwIfCancelled(listing.id);
     const post = listing.platform_posts.find((row) => row.platform === platform);
     try {
       const detail = await takedownOnPlatform(listing, platform, post?.remote_url);
       outcomes.push({ platform, ok: true, detail });
       await logAgent(listing.id, "browser", "TAKEDOWN", `${platform}: ${detail}`);
     } catch (error) {
+      if (isAgentCancelled(error)) throw error;
       const message =
         error instanceof Error ? error.message : "Could not take the listing down.";
       const detail = /402|browser minutes|upgrade your account|browserbase/i.test(message)

@@ -21,7 +21,7 @@ import {
   type OperatorGoal,
 } from "./operator-decide";
 
-export type { OperatorGoal } from "./operator-decide";
+import { throwIfCancelled } from "./cancel";
 
 async function visibleChoices(page: Page) {
   const names: string[] = [];
@@ -180,6 +180,7 @@ export async function operateListingForm(
   let lastOutcome = "";
   try {
     for (let step = 0; step < limit; step += 1) {
+      throwIfCancelled(listing.id);
       const url = page.url();
       if (
         !revise &&

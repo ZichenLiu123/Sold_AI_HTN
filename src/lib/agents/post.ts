@@ -1,6 +1,7 @@
 import type { Listing, Platform, PlatformPost } from "../types";
 import { decoratePosts, livePath } from "../platforms";
-import { getPlatformConnection, upsertPlatformConnection } from "../db";
+import { shouldSendLiveReceipt, upsertPlatformPosts } from "../marketplace/policy";
+import { getPlatformConnection, updateListing, upsertPlatformConnection } from "../db";
 import { DEMO_USER } from "../types";
 import {
   captureFacebookListing,
@@ -15,7 +16,7 @@ import {
   startMarketplaceSession,
 } from "../marketplace/browserbase";
 import { isLocalConnection, localPage, withLocalChrome } from "../marketplace/local-browser";
-import { shouldSendLiveReceipt } from "../marketplace/policy";
+import { AgentCancelled, clearCancel, isAgentCancelled, isCancelled } from "./cancel";
 import { browserbaseRetryDelay } from "../marketplace/rate-limit";
 
 function postedFromCapture(
@@ -39,10 +40,26 @@ function postedFromCapture(
   };
 }
 
+async function rememberPosted(listing: Listing, posts: PlatformPost[]) {
+  const posted = posts.filter((post) => post.status === "posted");
+  if (posted.length === 0) return;
+  const platform_posts = upsertPlatformPosts(listing.platform_posts, posted);
+  await updateListing(listing.id, { platform_posts });
+  listing.platform_posts = platform_posts;
+}
+
+async function haltIfStopped(listing: Listing, posts: PlatformPost[]) {
+  if (!isCancelled(listing.id)) return;
+  await rememberPosted(listing, posts);
+  throw new AgentCancelled();
+}
+
 export async function postListing(listing: Listing): Promise<PlatformPost[]> {
+  clearCancel(listing.id);
   const posts: PlatformPost[] = [];
 
   for (const platform of listing.platforms) {
+    await haltIfStopped(listing, posts);
     const existing = listing.platform_posts.find(
       (post) => post.platform === platform && post.status === "posted"
     );
@@ -64,6 +81,7 @@ export async function postListing(listing: Listing): Promise<PlatformPost[]> {
 
     if (isLocalConnection(connection.metadata) || platform === "eBay" || remoteMinutesExhausted()) {
       posts.push(await postViaLocalChrome(listing, platform));
+      await rememberPosted(listing, posts);
       continue;
     }
 
@@ -144,6 +162,7 @@ export async function postListing(listing: Listing): Promise<PlatformPost[]> {
         continue;
       }
       posts.push(postedFromCapture(listing, platform, verified));
+      await rememberPosted(listing, posts);
       await releaseSession(sessionId);
       await upsertPlatformConnection({
         ...connection,
@@ -152,6 +171,10 @@ export async function postListing(listing: Listing): Promise<PlatformPost[]> {
       });
       sessionId = null;
     } catch (error) {
+      if (isAgentCancelled(error)) {
+        await rememberPosted(listing, posts);
+        throw error;
+      }
       if (platform === "Craigslist") {
         posts.push(await postViaLocalChrome(listing, platform));
         continue;
@@ -191,6 +214,7 @@ async function postViaLocalChrome(
   if (!login.loggedIn && (platform === "Craigslist" || platform === "eBay")) {
     const started = Date.now();
     while (Date.now() - started < 180_000) {
+      await haltIfStopped(listing, []);
       login = await adapter.detectLogin(page);
       if (login.loggedIn) break;
       await page.waitForTimeout(2_500);
@@ -244,6 +268,7 @@ async function postViaLocalChrome(
     detail: `Did not go live on ${platform}. Publish ran, but no live listing URL was verified.`,
   };
   } catch (error) {
+    if (isAgentCancelled(error)) throw error;
     const recovered =
       platform === "Facebook Marketplace"
         ? await captureFacebookListing(

@@ -30,29 +30,27 @@ export function Shell({
   }, []);
 
   return (
-    <div className="sold-frame flex w-full justify-center bg-ink">
-      <div className="app-shell relative flex w-full max-w-[430px] flex-col overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.45)]">
-        <header className="sold-header safe-top z-20 shrink-0 border-b border-line/80 bg-paper/90 backdrop-blur">
-          <div className="flex items-center justify-between px-4 py-3">
-            {brand}
-            <Link
-              href="/platforms"
-              className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/55"
-            >
-              Accounts
-            </Link>
-          </div>
-          {status && !status.llm && (
-            <p className="border-t border-line bg-wash px-4 py-2 text-center text-xs text-ink/70">
-              Add an OpenAI or Anthropic key to run the agents.
-            </p>
-          )}
-        </header>
+    <>
+      <header className="sold-header safe-top z-20 shrink-0 border-b border-line/80 bg-paper/90 backdrop-blur">
+        <div className="flex items-center justify-between px-4 py-3">
+          {brand}
+          <Link
+            href="/platforms"
+            className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/55"
+          >
+            Accounts
+          </Link>
+        </div>
+        {status && !status.llm && (
+          <p className="border-t border-line bg-wash px-4 py-2 text-center text-xs text-ink/70">
+            Add an OpenAI or Anthropic key to run the agents.
+          </p>
+        )}
+      </header>
 
-        <main className="sold-main flex min-h-0 flex-1 flex-col">{children}</main>
-        <TabBar pathname={pathname} />
-      </div>
-    </div>
+      <main className="sold-main flex min-h-0 flex-1 flex-col">{children}</main>
+      <TabBar pathname={pathname} />
+    </>
   );
 }
 

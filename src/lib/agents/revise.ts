@@ -8,6 +8,7 @@ import { DEMO_USER } from "../types";
 import { getMarketplaceAdapter } from "../marketplace/adapters";
 import { isLocalConnection, localPage, withLocalChrome } from "../marketplace/local-browser";
 import { operateListingForm } from "./operator";
+import { clearCancel, isAgentCancelled, throwIfCancelled } from "./cancel";
 import {
   releaseSoldSessions,
   remoteMinutesExhausted,
@@ -69,6 +70,7 @@ export async function reviseListing(listing: Listing, input: ListingRevise | str
     throw new Error("Sold is already updating this live listing.");
   }
   revising.add(listing.id);
+  clearCancel(listing.id);
   try {
     const edits =
       typeof input === "string" ? await parseListingRevise(listing, input) : input;
@@ -76,6 +78,20 @@ export async function reviseListing(listing: Listing, input: ListingRevise | str
       throw new Error("Change a field, then save.");
     }
     return await runListingRevise(listing, edits);
+  } catch (error) {
+    if (isAgentCancelled(error)) {
+      await updateListing(listing.id, {
+        pipeline_stage: "Stopped",
+        pipeline_error: null,
+      });
+      await logAgent(listing.id, "browser", "STOPPED", "You stopped the live edit.");
+      return {
+        listing: (await getListing(listing.id))!,
+        edits: {},
+        detail: "Stopped.",
+      };
+    }
+    throw error;
   } finally {
     revising.delete(listing.id);
   }
@@ -136,11 +152,13 @@ async function runListingRevise(listing: Listing, edits: ListingRevise) {
   const remote: string[] = [];
   for (const post of targets) {
     if (post.platform === "Gmail receipt") continue;
+    throwIfCancelled(listing.id);
     try {
       const detail = await reviseOnPlatform(next, post.platform, post.remote_url, edits);
       remote.push(`${post.platform}: ${detail}`);
       await logAgent(listing.id, "browser", "REVISE", `${post.platform}: ${detail}`);
     } catch (error) {
+      if (isAgentCancelled(error)) throw error;
       const message = error instanceof Error ? error.message : "Could not edit the live listing.";
       remote.push(`${post.platform}: ${message}`);
       await logAgent(listing.id, "browser", "REVISE", `${post.platform} failed: ${message}`);

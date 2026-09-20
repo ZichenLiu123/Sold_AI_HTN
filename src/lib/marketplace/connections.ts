@@ -255,7 +255,7 @@ export async function disconnectConnection(platform: Platform): Promise<PublicCo
   });
   if (platform === "Facebook Marketplace") {
     const { stopFacebookMonitor } = await import("../agents/monitor");
-    stopFacebookMonitor();
+    stopFacebookMonitor({ persist: false });
   }
   return saved;
 }

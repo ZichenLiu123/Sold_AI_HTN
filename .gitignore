@@ -22,6 +22,7 @@
 /data/*.db-*
 /data/chrome-profiles/
 /data/browserbase-minutes-spent
+/data/inbox-watch.json
 /public/uploads/*
 !/public/uploads/.gitkeep
 
