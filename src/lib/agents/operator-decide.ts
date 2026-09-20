@@ -74,7 +74,7 @@ export function forbiddenTarget(target: string) {
 }
 
 export function listingAlreadyTakenDown(text: string) {
-  return /no longer available|sorry[,']? it'?s not available|this listing isn'?t available|this posting has been deleted|has been deleted by its author|listing (was )?deleted|this listing was deleted/i.test(
+  return /no longer available|sorry[,']? it'?s not available|this listing isn'?t available|this posting has been deleted|has been deleted by its author|listing (was )?deleted|this listing was deleted|you (don'?t|do not) have any listings|no listings to show/i.test(
     text
   );
 }

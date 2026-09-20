@@ -13,14 +13,24 @@ import {
   startMarketplaceSession,
 } from "../marketplace/browserbase";
 import { operateListingForm } from "./operator";
-import { clearCancel, isAgentCancelled, markAgentIdle, markAgentRunning, throwIfCancelled } from "./cancel";
+import { clearCancel, isAgentCancelled, isAgentRunning, isCancelled, markAgentIdle, markAgentRunning, throwIfCancelled } from "./cancel";
 import { listingAlreadyTakenDown } from "./operator-decide";
+import { scanSellingPage } from "../marketplace/facebook-inbox";
+import { sellingPresence } from "../marketplace/facebook-inbox-match";
 
 const working = new Set<string>();
 
+export function releaseTakedown(listingId: string) {
+  working.delete(listingId);
+}
+
 export async function takedownListing(listing: Listing) {
   if (working.has(listing.id)) {
-    throw new Error("Sold is already taking this listing down.");
+    if (isCancelled(listing.id) || !isAgentRunning(listing.id)) {
+      working.delete(listing.id);
+    } else {
+      throw new Error("Sold is already taking this listing down.");
+    }
   }
   working.add(listing.id);
   markAgentRunning(listing.id);
@@ -160,6 +170,16 @@ async function runTakedown(listing: Listing) {
   };
 }
 
+function matchTitleOnPage(text: string, title: string) {
+  const needle = title.trim().toLowerCase();
+  if (!needle) return false;
+  const hay = text.toLowerCase();
+  if (hay.includes(needle)) return true;
+  const words = needle.split(/\s+/).filter((word) => word.length > 2);
+  if (words.length < 2) return false;
+  return words.filter((word) => hay.includes(word)).length >= Math.ceil(words.length * 0.7);
+}
+
 async function clickTakedownControl(page: Page) {
   const names = [
     /delete this posting/i,
@@ -217,29 +237,50 @@ async function takedownOnPlatform(
       "TAKEDOWN",
       `Opening ${platform} to delete “${listing.title}”.`
     );
-    if (platform === "Facebook Marketplace" && remoteUrl) {
-      await page.goto(remoteUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
-      await page.waitForTimeout(800);
-      const itemText = await page.locator("body").innerText().catch(() => "");
-      if (listingAlreadyTakenDown(`${page.url()}\n${itemText}`)) {
-        return `Gone from ${platform}. It looks deleted or taken down.`;
+    if (platform === "Facebook Marketplace") {
+      if (remoteUrl) {
+        await page.goto(remoteUrl, { waitUntil: "domcontentloaded", timeout: 20_000 });
+        await page.waitForTimeout(800);
+        const itemText = await page.locator("body").innerText().catch(() => "");
+        if (listingAlreadyTakenDown(`${page.url()}\n${itemText}`)) {
+          return `Gone from ${platform}. It looks deleted or taken down.`;
+        }
+      }
+      const scan = await scanSellingPage(page);
+      const presence = sellingPresence(listing, scan);
+      if (presence === "missing" || presence === "deleted" || presence === "sold") {
+        return `Gone from ${platform}. Selling no longer shows “${listing.title}”.`;
+      }
+      if (presence === "unknown" && !remoteUrl) {
+        return `Gone from ${platform}. Selling no longer shows “${listing.title}”.`;
       }
     }
-    await page.goto(editorUrl || homeUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 20_000,
-    });
-    await page.waitForTimeout(800);
-    const homeText = await page.locator("body").innerText().catch(() => "");
-    if (listingAlreadyTakenDown(`${page.url()}\n${homeText}`)) {
-      return `Gone from ${platform}. It looks deleted or taken down.`;
-    }
-    if (await clickTakedownControl(page)) {
+    if (platform !== "Facebook Marketplace") {
+      await page.goto(editorUrl || homeUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 20_000,
+      });
+      await page.waitForTimeout(800);
+      const homeText = await page.locator("body").innerText().catch(() => "");
+      if (listingAlreadyTakenDown(`${page.url()}\n${homeText}`)) {
+        return `Gone from ${platform}. It looks deleted or taken down.`;
+      }
+      if (
+        listing.title &&
+        !matchTitleOnPage(homeText, listing.title) &&
+        /your listings|active listings|manage|selling/i.test(homeText)
+      ) {
+        return `Gone from ${platform}. Your listings page no longer shows “${listing.title}”.`;
+      }
+      if (await clickTakedownControl(page)) {
+        return `Deleted on ${platform}.`;
+      }
+    } else if (await clickTakedownControl(page)) {
       return `Deleted on ${platform}.`;
     }
     const operated = await operateListingForm(page, listing, platform, {
       mode: "takedown",
-      note: `Delete or end the live listing “${listing.title}”. If it is already gone or no longer available, stop. Do not open buyer chats. Do not type on Facebook.`,
+      note: `Delete or end the live listing “${listing.title}”. If it is already gone, missing from Selling, or no longer available, choose done. Do not open buyer chats. Do not type on Facebook.`,
       editorUrl,
       homeUrl,
     });

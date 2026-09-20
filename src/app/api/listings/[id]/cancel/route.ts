@@ -3,9 +3,12 @@ import { getListing, logAgent, updateListing } from "@/lib/db";
 import {
   clearCancel,
   isAgentRunning,
+  markAgentIdle,
   requestCancel,
   stoppedListingPatch,
 } from "@/lib/agents/cancel";
+import { releaseTakedown } from "@/lib/agents/takedown";
+import { releaseRevise } from "@/lib/agents/revise";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,11 +29,16 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     /^updating (facebook|craigslist|ebay)/i.test(listing.pipeline_stage || "") ||
     /^still opening /i.test(listing.pipeline_stage || "");
   if (!working) {
+    releaseTakedown(id);
+    releaseRevise(id);
     return NextResponse.json(listing);
   }
   requestCancel(id);
+  releaseTakedown(id);
+  releaseRevise(id);
   if (!isAgentRunning(id)) {
     clearCancel(id);
+    markAgentIdle(id);
     const stopped = await updateListing(id, stoppedListingPatch(listing));
     await logAgent(id, "browser", "STOPPED", "Stopped.");
     return NextResponse.json(stopped);
