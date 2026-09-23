@@ -89,7 +89,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     });
 
     if (body.status === "rejected") {
-      await logAgent(id, "lister", "REJECT", "Alex rejected the listing. It was not posted.");
+      await logAgent(id, "lister", "REJECT", "You rejected the listing. It was not posted.");
     } else if (
       typeof body.title === "string" ||
       typeof body.description === "string" ||

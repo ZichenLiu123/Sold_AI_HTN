@@ -23,10 +23,9 @@ export function AgentProcess() {
     <section id="agents" className="agent-process">
       <div className="page">
         <p className="marketing-label">How it works</p>
-        <h2 className="marketing-heading">Six agents. One photo.</h2>
+        <h2 className="marketing-heading">Three steps. One photo.</h2>
         <p className="marketing-copy mt-4 max-w-[32rem]">
-          The same path the demo shows — identify, publish, reply — with the parts
-          Sold refuses to fake.
+          Identify, publish, and reply — with the parts Sold refuses to fake.
         </p>
 
         <div className="agent-process__grid">

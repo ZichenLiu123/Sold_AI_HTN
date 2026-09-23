@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SoldMark } from "@/components/SoldMark";
 
@@ -10,6 +10,14 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/listings";
+  const configured = useMemo(
+    () =>
+      Boolean(
+        process.env.NEXT_PUBLIC_SUPABASE_URL &&
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ),
+    []
+  );
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -20,6 +28,7 @@ function LoginForm() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (!configured) return;
     setBusy(true);
     setError("");
     setMessage("");
@@ -63,6 +72,7 @@ function LoginForm() {
   }
 
   async function sendMagicLink() {
+    if (!configured) return;
     if (!email.trim()) {
       setError("Enter your email first.");
       return;
@@ -87,6 +97,31 @@ function LoginForm() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!configured) {
+    return (
+      <div className="mx-auto flex min-h-full w-full max-w-md flex-col justify-center px-4 py-10">
+        <SoldMark large />
+        <h1 className="mt-8 display text-[1.75rem] tracking-tight">Sign in</h1>
+        <p className="mt-2 text-[14px] leading-relaxed text-grey">
+          Auth isn&apos;t configured in this environment. Add{" "}
+          <code className="text-[13px] text-ink">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+          <code className="text-[13px] text-ink">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
+          to <code className="text-[13px] text-ink">.env.local</code>, then restart
+          the app.
+        </p>
+        <Link href="/listings" className="btn-primary mt-8 w-full text-center">
+          Continue in local demo mode
+        </Link>
+        <Link
+          href="/"
+          className="mt-6 text-center text-[13px] font-medium text-grey hover:text-ink"
+        >
+          ← Back to Sold
+        </Link>
+      </div>
+    );
   }
 
   return (

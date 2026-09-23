@@ -122,7 +122,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         id,
         "negotiator",
         "HUMAN",
-        `Alex took over: “${text.slice(0, 80)}”`
+        `You took over: “${text.slice(0, 80)}”`
       );
       return NextResponse.json({
         listing: await getListing(id),

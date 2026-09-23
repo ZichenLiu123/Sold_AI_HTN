@@ -34,3 +34,4 @@ npm-debug.log*
 next-env.d.ts
 .netlify
 .nexus-ref/
+/data/waitlist.json

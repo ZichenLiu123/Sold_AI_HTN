@@ -1,73 +1,71 @@
 # Sold
 
-Photograph something you want to sell. Sold writes the listing, checks real sold comps, and lets a Negotiator Agent handle the buyer.
-
-Built as a 36-hour hackathon demo. One hardcoded seller (`Alex`). No auth, no payments, no shipping.
+Take a photo of something you want to sell. Sold identifies it, prices it from live comps with real URLs, drafts the listing, publishes after you approve, and drafts buyer replies behind your floor.
 
 ## Stack
 
-- Next.js + React + Tailwind
-- LangGraph (`vision_extract → comp_search → generate_listing`)
-- GPT-4o or Claude for vision + listing copy + negotiation
-- Browserbase for sold-comp search and persistent marketplace seller sessions
-- Composio for an optional Gmail listing receipt
-- SQLite via Node’s built-in `node:sqlite`
+- Next.js App Router + React + Tailwind
+- Supabase Auth (required in production)
+- LangGraph agents: vision → comps → listing copy → publish → negotiate
+- Browserbase for marketplace sessions (optional; local Chrome fallback where configured)
+- SQLite for app data (`node:sqlite`), with Netlify-friendly cloud DB helpers when hosted
 
 ## Setup
 
 ```bash
 cp .env.example .env.local
-```
-
-Required for the three real agents (either one):
-
-```
-OPENAI_API_KEY=...
-```
-
-or
-
-```
-ANTHROPIC_API_KEY=...
-```
-
-Optional, but this is how you claim the live integrations:
-
-```
-BROWSERBASE_API_KEY=...
-BROWSERBASE_PROJECT_ID=...
-COMPOSIO_API_KEY=...
-COMPOSIO_USER_ID=sold-demo
-COMPOSIO_NOTIFY_EMAIL=you@email.com
-```
-
-```bash
 npm install
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Demo path
+### Environment
 
-1. **New listing** — upload a photo of a real object. Optional hints help; the photo leads.
-2. Watch the pipeline stamp through **vision → comps → copy**.
-3. Open **Accounts**, connect each marketplace, and sign in/complete 2FA directly
-   in the Browserbase live session. Return to Sold and click **Check login**.
-4. Set a **floor price** (never shown to the buyer). **Approve & publish**
-   authorizes automation only for selected, verified connections. Challenges or
-   ambiguous required fields pause with an **Open session** action.
-5. In the mock inbox, send as the buyer:
-   - a question → `ANSWER`
-   - a mid offer → `COUNTER`
-   - a lowball → `HOLD`
-   - asking price → `ACCEPT`
-   - overpay + refund shipping → `ESCALATE`
-6. Each agent reply is stamped with the action. That’s the judge shot.
+Required for agents (either provider works):
 
-If Browserbase isn’t configured, comps fall back to an estimate and the UI says so. Listing copy and negotiation still run on Claude.
+```
+OPENAI_API_KEY=
+# or
+ANTHROPIC_API_KEY=
+```
 
-Marketplace passwords and authentication artifacts never pass through Sold.
-SQLite stores only Browserbase context/session IDs and safe login evidence.
-This demo deliberately scopes every connection to `demo-seller`; production
-must add real authentication, per-user authorization, and encryption at rest.
+Required for production auth:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+Apply `supabase/migrations/20260923043318_sold_auth_profiles.sql` in your Supabase project.
+
+Optional integrations:
+
+```
+BROWSERBASE_API_KEY=
+BROWSERBASE_PROJECT_ID=
+COMPOSIO_API_KEY=
+COMPOSIO_USER_ID=
+COMPOSIO_NOTIFY_EMAIL=
+```
+
+Without Supabase env vars, local mode falls back to a single demo seller id so you can still exercise the agents. With Supabase configured, API routes and app pages require sign-in.
+
+## Product rules
+
+- No invented ask price without live comps that have public listing URLs
+- Nothing posts until you approve
+- Negotiator drafts stay behind your floor; nothing auto-sends
+- Marketplace passwords never pass through Sold (Browserbase/local sessions only)
+
+## Scripts
+
+```bash
+npm run build
+npm run test:pricing
+npm run test:marketplace
+```
+
+## Deploy
+
+Netlify build uses `npm run build` (see `netlify.toml`). Set the same env vars in the host. After deploy, confirm Sign in works and Image/agent keys are present.

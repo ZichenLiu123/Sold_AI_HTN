@@ -115,7 +115,6 @@ async function runTakedown(listing: Listing) {
   }
 
   const succeeded = new Set(outcomes.filter((row) => row.ok).map((row) => row.platform));
-  const failed = outcomes.filter((row) => !row.ok);
   const latest = (await getListing(listing.id))!;
   const posts: PlatformPost[] = latest.platform_posts.map((post) =>
     post.platform === "Gmail receipt"

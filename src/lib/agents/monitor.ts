@@ -447,7 +447,7 @@ async function handleThread(page: Awaited<ReturnType<typeof gotoLocalPage>>, thr
       listing.id,
       "negotiator",
       "HOLD",
-      `Alex already replied in Sold. Left Facebook thread with ${thread.buyer} alone.`
+      `You already replied in Sold. Left Facebook thread with ${thread.buyer} alone.`
     );
     return { replied: 0, escalated: 0, detail: "human" };
   }

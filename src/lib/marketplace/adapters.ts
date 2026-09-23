@@ -610,7 +610,7 @@ function adapter(config: {
         'input[placeholder="Title"]',
         'input[placeholder*="title" i]',
       ], listing.title);
-      const description = await fillFirst(page, [
+      await fillFirst(page, [
         ...config.description,
         'textarea[placeholder*="description" i]',
       ], listing.description);
