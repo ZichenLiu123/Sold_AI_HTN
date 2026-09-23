@@ -78,6 +78,15 @@ function accountHint(
     }
     return "Finish login in the window that opened — Sold will detect it automatically.";
   }
+  if (connection.status === "expired") {
+    return "Session expired. Reconnect once — Sold still does not store your password.";
+  }
+  if (connection.status === "error") {
+    return (
+      connection.error ||
+      "Last connect failed. Retry, or recheck the session if you already logged in."
+    );
+  }
   if (hosted) {
     return "Opens a live browser tab so you can log in from this phone.";
   }
@@ -92,19 +101,28 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  async function load() {
-    const response = await fetch("/api/platforms", { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Could not load accounts.");
-    setConnections(data.connections || []);
-    if (typeof data.hosted === "boolean") setCloudHost(data.hosted);
-    if (typeof data.remote_minutes_exhausted === "boolean") {
-      setMinutesSpent(data.remote_minutes_exhausted);
+  async function load(options?: { quiet?: boolean }) {
+    if (!options?.quiet) setBusy("reload");
+    try {
+      const response = await fetch("/api/platforms", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load accounts.");
+      const next = Array.isArray(data.connections) ? data.connections : [];
+      // API should always return one slot per marketplace; if it returns none,
+      // keep the list empty so recovery UI can retry instead of inventing state.
+      setConnections(next);
+      if (typeof data.hosted === "boolean") setCloudHost(data.hosted);
+      if (typeof data.remote_minutes_exhausted === "boolean") {
+        setMinutesSpent(data.remote_minutes_exhausted);
+      }
+      setError("");
+    } finally {
+      if (!options?.quiet) setBusy((current) => (current === "reload" ? "" : current));
     }
   }
 
   useEffect(() => {
-    load()
+    load({ quiet: true })
       .catch((reason) =>
         setError(reason instanceof Error ? reason.message : "Could not load accounts.")
       )
@@ -263,7 +281,7 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
           with Chrome, or wait until minutes reset.
         </p>
       )}
-      {error && (
+      {error && connections.length > 0 && (
         <p className="mt-4 rounded-xl border border-line bg-wash px-3.5 py-2.5 text-[13px] text-stamp">
           {error}
         </p>
@@ -279,14 +297,41 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
           ))}
         </ul>
       ) : connections.length === 0 ? (
-        <p className="mt-6 rounded-xl border border-line bg-wash px-4 py-4 text-[14px] text-grey">
-          No marketplace slots yet. Refresh, or restart Sold.
-        </p>
+        <div className="mt-6 rounded-xl border border-line bg-card px-4 py-5">
+          <p className="text-[15px] font-medium tracking-tight text-ink">
+            Marketplace slots didn&apos;t load
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-grey">
+            {error
+              ? "Sold couldn&apos;t reach your accounts. Try again — nothing was disconnected."
+              : "No marketplace slots came back. Retry to restore Facebook, Kijiji, and the rest."}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setError("");
+              load()
+                .catch((reason) =>
+                  setError(
+                    reason instanceof Error ? reason.message : "Could not load accounts."
+                  )
+                )
+                .finally(() => setLoading(false));
+            }}
+            disabled={busy === "reload"}
+            className="btn-primary mt-4 h-10 w-full text-[13px]"
+          >
+            {busy === "reload" ? "Loading…" : "Try again"}
+          </button>
+        </div>
       ) : (
         <ul className="mt-6 space-y-3">
           {connections.map((connection) => {
             const waiting = connection.status === "awaiting_login";
             const connected = connection.status === "connected";
+            const expired = connection.status === "expired";
+            const errored = connection.status === "error";
             return (
               <li key={connection.platform} className="panel px-4 py-4">
                 <div className="flex items-center justify-between gap-2">
@@ -299,7 +344,9 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
                         ? "badge-live"
                         : waiting
                           ? "badge-submitted"
-                          : "badge-draft"
+                          : expired || errored
+                            ? "badge-submitted"
+                            : "badge-draft"
                     }`}
                   >
                     {STATUS_LABEL[connection.status]}
@@ -345,7 +392,11 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
                       ? "Opening…"
                       : waiting
                         ? "Open login again"
-                        : `Connect ${connection.platform.replace(" Marketplace", "")}`}
+                        : expired
+                          ? `Reconnect ${connection.platform.replace(" Marketplace", "")}`
+                          : errored
+                            ? `Retry ${connection.platform.replace(" Marketplace", "")}`
+                            : `Connect ${connection.platform.replace(" Marketplace", "")}`}
                   </button>
                 )}
                 {waiting && (
@@ -356,6 +407,18 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
                     className="btn-secondary mt-2 h-10 w-full text-[13px]"
                   >
                     I finished logging in
+                  </button>
+                )}
+                {(expired || errored) && !waiting && (
+                  <button
+                    type="button"
+                    onClick={() => void check(connection)}
+                    disabled={Boolean(busy)}
+                    className="btn-secondary mt-2 h-10 w-full text-[13px]"
+                  >
+                    {busy === `${connection.platform}:check`
+                      ? "Checking…"
+                      : "Recheck session"}
                   </button>
                 )}
               </li>
