@@ -9,7 +9,7 @@ import {
   requestCancel,
   waitUntilAgentIdle,
 } from "@/lib/agents/cancel";
-import { apiError, withOwnedListing } from "@/lib/api";
+import { withOwnedListing } from "@/lib/api";
 import { runAsUserAsync } from "@/lib/seller-context";
 
 export const runtime = "nodejs";

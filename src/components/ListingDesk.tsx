@@ -923,7 +923,7 @@ function ReviewView({
                 )}
                 <div className="grid gap-3">
                   <p className="text-[13px] font-medium text-grey">
-                    Review item · fields from vision
+                    Item details
                   </p>
                   <label className="grid gap-1 text-[13px] font-medium text-grey">
                     Brand
@@ -1168,6 +1168,28 @@ function ReviewView({
           {listing.status === "ready" ? (
             <>
               <button
+                type="button"
+                onClick={() =>
+                  void saveDraft({
+                    title,
+                    description,
+                    price,
+                    floor_price: Number.isFinite(floor) && floor >= 0 ? floor : 0,
+                    platforms,
+                    attributes: {
+                      brand,
+                      category,
+                      condition,
+                      model,
+                    },
+                  })
+                }
+                disabled={Boolean(busy) || !title.trim()}
+                className="btn-secondary mt-3 w-full disabled:opacity-50"
+              >
+                {busy === "save" ? "Saving…" : "Save draft"}
+              </button>
+              <button
                 onClick={() =>
                   approve({
                     title,
@@ -1184,7 +1206,7 @@ function ReviewView({
                   })
                 }
                 disabled={busy === "post" || !canApprove}
-                className="btn-primary mt-3 w-full disabled:opacity-50"
+                className="btn-primary mt-2 w-full disabled:opacity-50"
               >
                 {busy === "post" ? "Posting listing…" : "Post listing"}
               </button>
