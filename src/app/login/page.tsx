@@ -23,7 +23,7 @@ function friendlyAuthError(reason: unknown, kind: "signin" | "signup" | "magic")
     return "Too many attempts. Wait a minute and try again.";
   }
   if (raw) return raw;
-  if (kind === "magic") return "Could not send magic link.";
+  if (kind === "magic") return "Could not send sign-in link.";
   if (kind === "signup") return "Could not create account.";
   return "Could not sign in.";
 }
@@ -111,7 +111,7 @@ function LoginForm() {
         },
       });
       if (linkError) throw linkError;
-      setMessage("Magic link sent — open it on this device to continue.");
+      setMessage("Sign-in link sent — open it on this device to continue.");
     } catch (reason) {
       setError(friendlyAuthError(reason, "magic"));
     } finally {
@@ -207,7 +207,7 @@ function LoginForm() {
         onClick={() => void sendMagicLink()}
         className="btn-secondary mt-3 w-full"
       >
-        {busy === "magic" ? "Sending link…" : "Email me a magic link"}
+        {busy === "magic" ? "Sending link…" : "Email me a sign-in link"}
       </button>
 
       <p className="mt-6 text-center text-[13px] text-grey">
