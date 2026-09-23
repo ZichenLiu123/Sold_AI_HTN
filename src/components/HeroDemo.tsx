@@ -18,17 +18,17 @@ const BEAT: Record<
 > = {
   identify: {
     label: "Identify",
-    caption: "Vision agent reads the photo — then prices from live comps.",
+    caption: "Reads the photo, then prices from live comps.",
     dwell: 5800,
   },
   post: {
     label: "Post",
-    caption: "Posting agents go live only with a public URL.",
+    caption: "Goes live only with a public listing URL.",
     dwell: 5200,
   },
   reply: {
     label: "Reply",
-    caption: "Negotiator drafts behind your floor — you send.",
+    caption: "Drafts stay behind your floor — you send.",
     dwell: 5400,
   },
 };
@@ -69,9 +69,9 @@ const MARKETS = [
 ] as const;
 
 const AGENT_LINES: Record<Phase, string[]> = {
-  identify: ["Vision · reading photo", "Pricing · citing live comps"],
-  post: ["Posting · Facebook", "Posting · Kijiji", "Posting · OfferUp"],
-  reply: ["Negotiator · reading offer", "Negotiator · drafting reply"],
+  identify: ["Reading the photo", "Citing live comps"],
+  post: ["Posting to Facebook", "Posting to Kijiji", "Posting to OfferUp"],
+  reply: ["Reading the offer", "Drafting a reply"],
 };
 
 export function HeroDemo() {
@@ -288,7 +288,7 @@ export function HeroDemo() {
               <span />
             </div>
             <div className="hero-demo__bubble hero-demo__bubble--agent">
-              <p className="hero-demo__bubble-who">Sold Agent · hold</p>
+              <p className="hero-demo__bubble-who">Draft · hold</p>
               <p>Still available at $89 — happy to meet this evening.</p>
               <p className="hero-demo__bubble-meta">Draft · not sent · floor held</p>
             </div>

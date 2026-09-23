@@ -772,6 +772,16 @@ export function ListingDesk({
           onDiscard={discardListing}
           onStop={() => void stopAgent()}
         />
+      ) : listing.status === "analyzing" ||
+        (listing.status === "draft" && !listing.title) ? (
+        <AnalyzingProgress
+          listing={listing}
+          events={events}
+          busy={busy}
+          stopping={stopping}
+          onStop={() => void stopAgent()}
+          onDiscard={discardListing}
+        />
       ) : (
         <ReviewView
           listing={listing}
@@ -1277,18 +1287,6 @@ function ReviewView({
         </div>
       )}
 
-      {listing.status === "analyzing" && (
-        <div className="safe-bottom border-t border-line bg-card px-4 py-3">
-          <button
-            type="button"
-            onClick={() => discard()}
-            disabled={Boolean(busy)}
-            className="h-12 w-full rounded-xl text-sm text-sold"
-          >
-            Cancel listing
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -2123,6 +2121,120 @@ function FacebookReviewNotice({
             busy={busy}
           />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function analyzingHeadline(listing: Listing) {
+  const stage = (listing.pipeline_stage || "").toLowerCase();
+  if (listing.title) return "Finishing your draft.";
+  if (listing.comps && listing.comps.comps.length > 0) return "Writing the listing.";
+  if (listing.attributes) return "Finding live comps.";
+  if (/comp|price|shopping|ebay|google/i.test(stage)) return "Finding live comps.";
+  if (/photo|read|identif|vision/i.test(stage)) return "Reading your photos.";
+  return "Working on your listing.";
+}
+
+function analyzingNote(listing: Listing) {
+  if (listing.pipeline_stage) return listing.pipeline_stage;
+  if (listing.attributes && !listing.comps) {
+    return "Photos are identified. Sold is citing live marketplace URLs before suggesting an ask.";
+  }
+  if (!listing.attributes) {
+    return "Sold is identifying the item from your photos, then pricing from live comps — nothing posts yet.";
+  }
+  return "Drafting title and description from what it found. You review before anything goes live.";
+}
+
+function AnalyzingProgress({
+  listing,
+  events,
+  busy,
+  stopping,
+  onStop,
+  onDiscard,
+}: {
+  listing: Listing;
+  events: AgentEvent[];
+  busy: string;
+  stopping?: boolean;
+  onStop?: () => void;
+  onDiscard: () => void;
+}) {
+  const working = Boolean(busy) || listing.status === "analyzing";
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+        <div className="px-4 pt-4">
+          <PhotoTray
+            photos={listing.photos}
+            onRemove={() => undefined}
+            onAdd={() => undefined}
+            locked
+          />
+        </div>
+        <div className="px-4 py-5">
+          <Pipeline listing={listing} busy={working} />
+          <p className="stamp mt-5 w-fit text-sage">working</p>
+          <h2 className="mt-3 text-[1.75rem] font-bold tracking-[-0.03em]">
+            {analyzingHeadline(listing)}
+          </h2>
+          <p className="mt-3 text-sm leading-relaxed text-ink/70">
+            {analyzingNote(listing)}
+          </p>
+          {listing.attributes && (
+            <dl className="mt-5 grid grid-cols-2 gap-3 rounded-xl border border-line bg-card px-3.5 py-3 text-[14px]">
+              <Row k="Category" v={listing.attributes.category} />
+              <Row k="Brand" v={listing.attributes.brand || "not visible"} />
+              <Row k="Condition" v={listing.attributes.condition} />
+              <Row k="Model" v={listing.attributes.model || "—"} />
+            </dl>
+          )}
+          {listing.comps && listing.comps.comps.length > 0 && (
+            <div className="mt-4 rounded-xl border border-line bg-card px-3.5 py-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[13px] font-medium text-ink">Comps so far</p>
+                <span className="font-mono text-[12px] text-grey">
+                  {listing.comps.comps.length} cited
+                  {listing.comps.median != null
+                    ? ` · med ${money(listing.comps.median)}`
+                    : ""}
+                </span>
+              </div>
+              <ul className="mt-2 space-y-2">
+                {listing.comps.comps.slice(0, 3).map((comp, index) => (
+                  <li
+                    key={`${comp.source}-${comp.url}-${index}`}
+                    className="flex items-start justify-between gap-3 text-[13px]"
+                  >
+                    <span className="min-w-0 truncate text-ink">{comp.title}</span>
+                    <span className="shrink-0 font-mono text-ink">
+                      {money(comp.unit_price ?? comp.price)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <AgentLog
+            events={events}
+            busy={busy || (working ? "lister" : "")}
+            stage={listing.pipeline_stage}
+            onStop={onStop}
+            stopping={stopping}
+          />
+        </div>
+      </div>
+      <div className="safe-bottom border-t border-line bg-card px-4 py-3">
+        <button
+          type="button"
+          onClick={() => onDiscard()}
+          disabled={Boolean(busy)}
+          className="h-12 w-full rounded-xl text-sm text-sold"
+        >
+          {busy === "takedown" ? "Cancelling…" : "Cancel listing"}
+        </button>
       </div>
     </div>
   );

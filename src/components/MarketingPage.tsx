@@ -74,13 +74,16 @@ export function MarketingPage() {
         <div className="page marketing-cta__inner">
           <h2 className="marketing-heading">Free while we&apos;re in beta</h2>
           <p className="marketing-copy mt-4 max-w-[28rem]">
-            Try the agents on a real item now — or leave an email for when paid
-            seats open.
+            Leave an email for when paid seats open — or sign in if you already
+            have access.
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-start">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
             <WaitlistForm />
-            <Link href="/login" className="btn-secondary shrink-0">
-              Open app
+            <Link
+              href="/login"
+              className="text-center text-[13px] font-medium text-grey underline-offset-4 hover:text-ink hover:underline sm:px-2"
+            >
+              Already have access? Sign in
             </Link>
           </div>
         </div>
