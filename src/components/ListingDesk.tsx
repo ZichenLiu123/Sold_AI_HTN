@@ -514,12 +514,13 @@ export function ListingDesk({
     const conversationId = threadId || demoConversationId(id);
     const buyerName =
       conversationById(id, messages, conversationId)?.buyer_name || DEMO_BUYER_NAME;
+    const outboundSender = authConfigured() ? "human" : sender;
     const res = await fetch(`/api/listings/${id}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text,
-        sender,
+        sender: outboundSender,
         conversation_id: conversationId,
         buyer_name: buyerName,
       }),
@@ -1669,8 +1670,8 @@ function LiveListingView({
             <span className="mt-0.5 block text-sm text-ink/55">
               {buyerCount === 0
                 ? authConfigured()
-                  ? "No marketplace buyers yet. A chat appears when someone writes you."
-                  : "No marketplace buyers yet. A chat appears when someone writes you — or open Demo to practice."
+                  ? "No buyers yet. A chat appears when someone writes you."
+                  : "No buyers yet. A chat appears when someone writes you — or open Demo to practice."
                 : `${buyerCount} ${buyerCount === 1 ? "person" : "people"}`}
             </span>
           </span>
@@ -1782,45 +1783,56 @@ function ThreadList({
           buyers
         </p>
         <h2 className="mt-1 text-[1.75rem] font-bold tracking-[-0.03em]">
-          Each person is a thread.
+          {threads.length === 0 ? "Waiting on the first buyer." : "Each person is a thread."}
         </h2>
         <p className="mt-2 text-sm text-ink/60">
-          {authConfigured()
-            ? "Marketplace buyers land here as themselves when they write you."
-            : "Marketplace buyers land here as themselves. Demo is only for practicing in Sold."}
+          {threads.length === 0
+            ? "A thread appears here when someone writes about this listing. Facebook stays monitor-only — you reply there."
+            : authConfigured()
+              ? "Marketplace buyers land here as themselves when they write you."
+              : "Marketplace buyers land here as themselves. Demo is only for practicing in Sold."}
         </p>
-        <ul className="mt-4 divide-y divide-line overflow-hidden rounded-2xl bg-card">
-          {threads.map((thread) => (
-            <li key={thread.id}>
-              <button
-                type="button"
-                onClick={() => onOpen(thread.id)}
-                className="flex w-full items-center gap-3 px-3 py-3 text-left active:bg-wash/60"
-              >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-wash text-lg font-semibold">
-                  {thread.buyer_name.slice(0, 1)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-baseline justify-between gap-2">
-                    <span className="truncate font-serif text-base leading-tight">
-                      {thread.buyer_name}
-                    </span>
-                    {thread.demo && (
-                      <span className="stamp shrink-0 text-[8px] text-ink/45">
-                        demo
+        {threads.length === 0 ? (
+          <div className="mt-4 rounded-2xl border border-line bg-card px-4 py-5">
+            <p className="text-[15px] font-semibold tracking-tight text-ink">No messages yet</p>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-grey">
+              Keep the listing live. Sold will surface the thread when a buyer reaches out.
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-4 divide-y divide-line overflow-hidden rounded-2xl bg-card">
+            {threads.map((thread) => (
+              <li key={thread.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(thread.id)}
+                  className="flex w-full items-center gap-3 px-3 py-3 text-left active:bg-wash/60"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-wash text-lg font-semibold">
+                    {thread.buyer_name.slice(0, 1)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="truncate font-serif text-base leading-tight">
+                        {thread.buyer_name}
                       </span>
-                    )}
+                      {thread.demo && (
+                        <span className="stamp shrink-0 text-[8px] text-ink/45">
+                          demo
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block truncate text-xs text-ink/55">
+                      {thread.last
+                        ? thread.last.text
+                        : `No messages on ${listing.title || "this listing"} yet.`}
+                    </span>
                   </span>
-                  <span className="mt-0.5 block truncate text-xs text-ink/55">
-                    {thread.last
-                      ? thread.last.text
-                      : `No messages on ${listing.title || "this listing"} yet.`}
-                  </span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -1872,6 +1884,8 @@ function ChatView({
         message.action === "accept" &&
         !listingSold
     );
+  const practiceMode = !authConfigured();
+  const effectiveSender = practiceMode ? sender : "human";
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 [-webkit-overflow-scrolling:touch]">
@@ -1887,12 +1901,14 @@ function ChatView({
         {messages.length === 0 && !facebookGone && (
           <div className="rounded-2xl bg-card px-4 py-3">
             <p className="text-[1.15rem] font-semibold tracking-[-0.02em]">
-              {watchingFacebook ? "Watching Facebook" : "Start the conversation"}
+              {watchingFacebook ? "Watching Facebook" : "No messages yet"}
             </p>
             <p className="mt-1 text-sm text-ink/60">
               {watchingFacebook
                 ? `Sold is watching Marketplace for ${buyerName}. When they write, the draft lands in this thread — you reply on Facebook.`
-                : `Message as ${buyerName}, or switch to You to reply directly. Agent replies are drafts until you approve an accept.`}
+                : practiceMode
+                  ? `Message as ${buyerName}, or switch to You to reply directly. Agent replies are drafts until you approve an accept.`
+                  : `When ${buyerName} writes, it lands here. Agent replies stay drafts until you approve an accept.`}
             </p>
           </div>
         )}
@@ -1935,46 +1951,53 @@ function ChatView({
           >
             {lastAgent ? `Activity · ${lastAgent.action}` : "Activity"}
           </button>
-          <div className="flex shrink-0 rounded-lg border border-line bg-wash p-0.5 text-[12px] font-semibold">
-            <label className={`cursor-pointer px-2 py-1 ${sender === "buyer" ? "bg-ink text-paper" : "text-grey"}`}>
-              <input
-                type="radio"
-                checked={sender === "buyer"}
-                onChange={() => setSender("buyer")}
-                className="sr-only"
-              />
-              Buyer
-            </label>
-            <label className={`cursor-pointer px-2 py-1 ${sender === "human" ? "bg-ink text-paper" : "text-grey"}`}>
-              <input
-                type="radio"
-                checked={sender === "human"}
-                onChange={() => setSender("human")}
-                className="sr-only"
-              />
-              You
-            </label>
+          {practiceMode && !watchingFacebook ? (
+            <div className="flex shrink-0 rounded-lg border border-line bg-wash p-0.5 text-[12px] font-semibold">
+              <label className={`cursor-pointer px-2 py-1 ${sender === "buyer" ? "bg-ink text-paper" : "text-grey"}`}>
+                <input
+                  type="radio"
+                  checked={sender === "buyer"}
+                  onChange={() => setSender("buyer")}
+                  className="sr-only"
+                />
+                Buyer
+              </label>
+              <label className={`cursor-pointer px-2 py-1 ${sender === "human" ? "bg-ink text-paper" : "text-grey"}`}>
+                <input
+                  type="radio"
+                  checked={sender === "human"}
+                  onChange={() => setSender("human")}
+                  className="sr-only"
+                />
+                You
+              </label>
+            </div>
+          ) : (
+            <span className="shrink-0 text-[12px] font-medium text-grey">You</span>
+          )}
+        </div>
+        {practiceMode && !watchingFacebook ? (
+          <div className="-mx-3 mb-1.5 flex gap-1.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {chips.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => {
+                  setSender("buyer");
+                  void send(chip);
+                }}
+                className="shrink-0 border border-line bg-card px-2.5 py-1 text-[12px] text-grey"
+              >
+                {chip}
+              </button>
+            ))}
           </div>
-        </div>
-        <div className="-mx-3 mb-1.5 flex gap-1.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {chips.map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => {
-                setSender("buyer");
-                void send(chip);
-              }}
-              className="shrink-0 border border-line bg-card px-2.5 py-1 text-[12px] text-grey"
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
+        ) : null}
         <form
           className="flex gap-2 pb-2"
           onSubmit={(e) => {
             e.preventDefault();
+            if (!practiceMode && sender !== "human") setSender("human");
             void send();
           }}
         >
@@ -1984,7 +2007,7 @@ function ChatView({
             placeholder={
               watchingFacebook
                 ? "Monitor-only — reply on Facebook"
-                : sender === "human"
+                : effectiveSender === "human"
                   ? "Your reply — stays in Sold until you send it"
                   : `Message as ${buyerName}…`
             }
@@ -1996,7 +2019,7 @@ function ChatView({
             disabled={busy === "chat" || watchingFacebook}
             className="btn-primary h-11 shrink-0 px-4 text-[13px] disabled:opacity-50"
           >
-            {sender === "human" ? "Save reply" : "Send message"}
+            {effectiveSender === "human" ? "Save reply" : "Send message"}
           </button>
         </form>
         {error && <p className="pb-2 text-[13px] text-stamp">{error}</p>}
@@ -2521,10 +2544,7 @@ function StatusManifest({ listing }: { listing: Listing }) {
 
   let label = "Draft";
   let className = "badge-draft";
-  let note =
-    listing.status === "ready"
-      ? "Ready for your review. Nothing has posted."
-      : listing.pipeline_stage || "Not posted.";
+  let note = "Not posted.";
   let url: string | null = null;
   let stamped = false;
 
@@ -2542,6 +2562,23 @@ function StatusManifest({ listing }: { listing: Listing }) {
     label = "Submitted";
     className = "badge-submitted";
     note = "Form filled. Not live until a public URL exists.";
+  } else if (listing.status === "analyzing" || (listing.status === "draft" && !listing.title)) {
+    label = "Working";
+    className = "badge-submitted";
+    note = listing.pipeline_stage || "Identifying the item and pulling comps.";
+  } else if (listing.status === "ready") {
+    note = "Ready for your review. Nothing has posted.";
+  } else if (listing.status === "error") {
+    label = "Error";
+    className = "badge-live";
+    note = listing.pipeline_error || listing.pipeline_stage || "Something went wrong.";
+  } else if (listing.status === "rejected") {
+    label = "Rejected";
+    note = /taken down/i.test(listing.pipeline_stage || "")
+      ? "Taken down. It is no longer live."
+      : "Rejected — it never went live.";
+  } else if (listing.pipeline_stage) {
+    note = listing.pipeline_stage;
   }
 
   return (
