@@ -207,7 +207,8 @@ export function ListingDesk({
     })();
     return () => {
       cancelled = true;
-      if (poll.current) window.clearInterval(poll.current);
+      const pollId = poll.current;
+      if (pollId) window.clearInterval(pollId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
