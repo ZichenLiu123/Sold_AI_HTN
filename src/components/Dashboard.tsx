@@ -10,9 +10,9 @@ export function Dashboard({ listings = [] }: { listings: Listing[] }) {
           Start with a photo
         </h1>
         <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-grey">
-          Sold identifies the item, finds comps with real URLs, writes the listing,
-          and waits for your approval before posting. Once it is live, inbox watch
-          drafts replies — you approve what goes out.
+          Sold identifies the item, prices from live comps, writes the listing, and
+          waits for your approval before posting. After it&apos;s live, drafts stay
+          here until you approve what goes out.
         </p>
         <Link href="/new" className="btn-primary mt-8 w-fit">
           Take a photo
