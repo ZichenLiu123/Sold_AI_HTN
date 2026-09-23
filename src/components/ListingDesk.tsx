@@ -1668,7 +1668,9 @@ function LiveListingView({
             <span className="block text-[1.15rem] font-semibold tracking-[-0.02em]">Buyer chats</span>
             <span className="mt-0.5 block text-sm text-ink/55">
               {buyerCount === 0
-                ? "No marketplace buyers yet. A chat appears only when someone writes you. Demo is practice inside Sold."
+                ? authConfigured()
+                  ? "No marketplace buyers yet. A chat appears when someone writes you."
+                  : "No marketplace buyers yet. A chat appears when someone writes you — or open Demo to practice."
                 : `${buyerCount} ${buyerCount === 1 ? "person" : "people"}`}
             </span>
           </span>
@@ -1783,8 +1785,9 @@ function ThreadList({
           Each person is a thread.
         </h2>
         <p className="mt-2 text-sm text-ink/60">
-          Real Marketplace buyers land here as themselves. The Demo thread is
-          only for practicing in Sold.
+          {authConfigured()
+            ? "Marketplace buyers land here as themselves when they write you."
+            : "Marketplace buyers land here as themselves. Demo is only for practicing in Sold."}
         </p>
         <ul className="mt-4 divide-y divide-line overflow-hidden rounded-2xl bg-card">
           {threads.map((thread) => (
@@ -1889,7 +1892,7 @@ function ChatView({
             <p className="mt-1 text-sm text-ink/60">
               {watchingFacebook
                 ? `Sold is watching Marketplace for ${buyerName}. When they write, the draft lands in this thread — you reply on Facebook.`
-                : `Message as ${buyerName}, or switch to You to reply directly. Agent replies are drafts until you stamp an accept.`}
+                : `Message as ${buyerName}, or switch to You to reply directly. Agent replies are drafts until you approve an accept.`}
             </p>
           </div>
         )}
