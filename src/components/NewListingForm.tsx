@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PhotoTray } from "./PhotoTray";
 
 export function NewListingForm() {
@@ -14,6 +14,12 @@ export function NewListingForm() {
     () => files.map((file) => URL.createObjectURL(file)),
     [files]
   );
+
+  useEffect(() => {
+    return () => {
+      for (const src of previews) URL.revokeObjectURL(src);
+    };
+  }, [previews]);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,7 +47,7 @@ export function NewListingForm() {
     <form onSubmit={onSubmit} className="flex min-h-[70dvh] flex-col px-4 py-6">
       <h1 className="display text-[1.75rem] tracking-tight">New listing</h1>
       <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-grey">
-        Take photos now. Sold reads every angle before it prices.
+        Photos first. Optional details help — the photo still leads.
       </p>
 
       <div className="mt-6">
