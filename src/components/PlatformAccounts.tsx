@@ -37,25 +37,25 @@ function platformRegion(platform: string) {
 
 function platformCapability(platform: string) {
   if (platform === "Facebook Marketplace") {
-    return "Post + verify live URL. Inbox: monitor-only — drafts in Sold, you reply on Facebook.";
+    return "Posts and verifies a live URL. Inbox is monitor-only — you reply on Facebook.";
   }
   if (platform === "Kijiji") {
-    return `${platformRegion(platform)}. Post + verify. Canada’s main classifieds marketplace.`;
+    return `${platformRegion(platform)}. Posts and verifies a live listing URL.`;
   }
   if (platform === "OfferUp") {
-    return `${platformRegion(platform)}. Post + verify. Local pickup marketplace.`;
+    return `${platformRegion(platform)}. Posts and verifies a live listing URL.`;
   }
   if (platform === "Craigslist") {
-    return "Post + verify. Inbox: watch drafts replies in Sold; Sold does not send the email.";
+    return "Posts and verifies a live URL. Drafts replies in Sold — does not send email.";
   }
   if (platform === "Mercari") {
-    return `${platformRegion(platform)}. Post + verify. Ship-friendly used goods.`;
+    return `${platformRegion(platform)}. Posts and verifies a live listing URL.`;
   }
   if (platform === "Poshmark") {
-    return `${platformRegion(platform)}. Post + verify. Fashion and closet resale.`;
+    return `${platformRegion(platform)}. Posts and verifies a live listing URL.`;
   }
   if (platform === "eBay") {
-    return "Post + verify. Inbox: watch drafts replies in Sold; you send from eBay Messages.";
+    return "Posts and verifies a live URL. Drafts replies in Sold — you send on eBay.";
   }
   return "Connect to post and watch.";
 }

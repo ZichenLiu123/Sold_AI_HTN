@@ -1,3 +1,5 @@
+import { DEMO_USER } from "@/lib/types";
+import { trySellerId } from "@/lib/seller-context";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Browserbase } from "@browserbasehq/sdk";
@@ -123,7 +125,7 @@ export async function createBrowserbaseSession() {
       userMetadata: {
         app: "sold",
         task: "comps",
-        userId: "demo-seller",
+        userId: trySellerId() || DEMO_USER.id,
       },
     })
   );
@@ -195,7 +197,7 @@ export async function createMarketplaceSession(
             app: "sold",
             platform: platformSlug(platform),
             task,
-            userId: "demo-seller",
+            userId: trySellerId() || DEMO_USER.id,
           },
         })
       );

@@ -1,3 +1,5 @@
+import { authConfigured } from "@/lib/auth-config";
+export { authConfigured } from "@/lib/auth-config";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_USER } from "@/lib/types";
 
@@ -5,13 +7,6 @@ export type AuthUser = {
   id: string;
   email: string | null;
 };
-
-export function authConfigured() {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
-}
 
 /** Current signed-in user, or null. */
 export async function getAuthUser(): Promise<AuthUser | null> {

@@ -25,6 +25,7 @@ import {
 import { openListingLink } from "@/lib/platforms";
 import { PhotoTray } from "./PhotoTray";
 import { RubberStamp } from "./RubberStamp";
+import { authConfigured } from "@/lib/auth-config";
 
 type ListingEdits = {
   title: string;
@@ -565,7 +566,9 @@ export function ListingDesk({
   const publishStalled = listingPublishStalled(listing);
   const facebookGone = facebookListingGone(listing);
   const facebookReview = facebookListingReview(listing);
-  const threads = conversationsForListing(id, messages, { includeDemo: chatReady });
+  const threads = conversationsForListing(id, messages, {
+    includeDemo: chatReady && !authConfigured(),
+  });
   const active = conversationById(id, messages, threadId);
 
   function openThread(conversationId: string) {

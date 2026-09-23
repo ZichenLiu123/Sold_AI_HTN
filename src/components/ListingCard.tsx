@@ -9,7 +9,10 @@ export function ListingCard({ listing }: { listing: Listing }) {
   const photo = listing.photos[0];
   const gone = facebookListingGone(listing);
   const livePost = listing.platform_posts.find(
-    (post) => post.status === "posted" && (post.url || post.remote_url)
+    (post) =>
+      post.platform !== "Gmail receipt" &&
+      post.status === "posted" &&
+      (post.url || post.remote_url)
   );
   const liveUrl = livePost?.url || livePost?.remote_url;
   const stamped = !gone && (listing.status === "live" || listing.status === "sold");
@@ -49,8 +52,10 @@ export function ListingCard({ listing }: { listing: Listing }) {
           {listing.title || "Reading the photos…"}
         </h2>
         <p className="mt-0.5 truncate text-[13px] text-grey">{floorCaption(listing)}</p>
-        {liveUrl ? (
-          <p className="mt-1 truncate text-[11px] text-grey">{liveUrl}</p>
+        {liveUrl && livePost ? (
+          <p className="mt-1 truncate text-[12px] text-grey">
+            Live on {livePost.platform}
+          </p>
         ) : null}
       </div>
     </Link>

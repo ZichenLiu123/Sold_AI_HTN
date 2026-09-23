@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { InboxWatchToggle } from "@/components/InboxWatchToggle";
 import { asSellerPage } from "@/lib/api";
+import { authConfigured } from "@/lib/auth-config";
 import { conversationsForListing } from "@/lib/conversations";
 import { ensureDemoInboxes } from "@/lib/demo-inbox";
 import { listListings, listMessages } from "@/lib/db";
@@ -16,7 +17,7 @@ function threadState(last: {
 } | null) {
   if (!last) return "no messages yet";
   if (last.sender === "agent" && last.action === "accept") {
-    return "needs stamp · accept draft";
+    return "needs your approval · accept draft";
   }
   if (last.escalate) return "needs you";
   if (last.action) return `draft · ${last.action}`;
@@ -26,13 +27,16 @@ function threadState(last: {
 export default async function InboxPage() {
   return asSellerPage(async () => {
     const listings = await listListings();
-    await ensureDemoInboxes(listings);
+    const showDemo = !authConfigured();
+    if (showDemo) {
+      await ensureDemoInboxes(listings);
+    }
     const threads = (
       await Promise.all(
         listings.map(async (listing) => {
           const messages = await listMessages(listing.id);
           const conversations = conversationsForListing(listing.id, messages, {
-            includeDemo: true,
+            includeDemo: showDemo,
           }).filter((conversation) => conversation.last);
           if (conversations.length === 0) return [];
           return [{ listing, conversations }];
@@ -50,8 +54,8 @@ export default async function InboxPage() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
         <h1 className="display text-[1.75rem] tracking-tight">Inbox</h1>
         <p className="mt-1.5 max-w-md text-[14px] leading-relaxed text-grey">
-          Sold drafts replies here. Nothing leaves until you stamp — or you reply on
-          Facebook yourself.
+          Sold drafts replies here. Nothing goes out until you approve — or you
+          reply on the marketplace yourself.
         </p>
         <InboxWatchToggle />
         {threads.length === 0 ? (
@@ -76,18 +80,25 @@ export default async function InboxPage() {
               const needsStamp =
                 latest?.last?.sender === "agent" &&
                 latest.last.action === "accept";
+              const photo = listing.photos[0];
               return (
                 <li key={listing.id}>
                   <Link
                     href={`/listings/${listing.id}?chats=1`}
                     className="grid grid-cols-[3.25rem_1fr] gap-3.5 py-3.5 transition-colors active:bg-wash/70"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={listing.photos[0]}
-                      alt=""
-                      className="aspect-square rounded-xl object-cover"
-                    />
+                    {photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={photo}
+                        alt=""
+                        className="aspect-square rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-square items-center justify-center rounded-xl bg-wash text-[10px] text-grey">
+                        No photo
+                      </div>
+                    )}
                     <div className="min-w-0 self-center">
                       <div className="flex items-baseline justify-between gap-2">
                         <p className="truncate text-[15px] font-semibold tracking-tight text-ink">
@@ -108,7 +119,7 @@ export default async function InboxPage() {
                         }`}
                       >
                         {threadState(latest?.last || null)}
-                        {facebookOnly ? " · facebook monitor-only" : ""}
+                        {facebookOnly ? " · Facebook monitor-only" : ""}
                       </p>
                     </div>
                   </Link>
