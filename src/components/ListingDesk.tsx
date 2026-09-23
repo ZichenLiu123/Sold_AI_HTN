@@ -546,7 +546,7 @@ export function ListingDesk({
     });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error || "Stamp failed");
+      setError(data.error || "Could not approve sale.");
     } else {
       setListing(data.listing);
       setMessages(data.messages);
@@ -1917,7 +1917,7 @@ function ChatView({
           </p>
         ) : pendingStamp ? (
           <p className="mb-2 text-[12px] text-stamp">
-            Accept draft ready. Stamp to mark sold — Sold will not send this for you yet.
+            Accept draft ready. Approve to mark sold — Sold will not send this for you yet.
           </p>
         ) : (
           <p className="mb-2 text-[12px] text-grey">
@@ -2649,7 +2649,7 @@ function Bubble({
             disabled={stampBusy}
             className="mt-3 inline-flex items-center gap-2 border border-stamp/40 bg-paper px-3 py-1.5 text-[12px] font-medium text-stamp disabled:opacity-50"
           >
-            {stampBusy ? "Stamping…" : "Stamp accept · mark sold"}
+            {stampBusy ? "Approving…" : "Approve accept · mark sold"}
           </button>
         )}
       </div>

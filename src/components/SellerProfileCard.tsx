@@ -9,12 +9,14 @@ export function SellerProfileCard() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/profile", { cache: "no-store" })
       .then((response) => response.json())
       .then((data) => setProfile({ ...emptySellerProfile(), ...data }))
-      .catch(() => setError("Could not load profile."));
+      .catch(() => setError("Could not load profile."))
+      .finally(() => setLoading(false));
   }, []);
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -46,20 +48,21 @@ export function SellerProfileCard() {
     }
   }
 
+  const ready = profileReadyForPosting(profile);
+
   return (
     <form onSubmit={(event) => void save(event)} className="panel px-4 py-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[15px] font-semibold tracking-tight text-ink">Seller profile</p>
-        <span
-          className={`stamp ${
-            profileReadyForPosting(profile) ? "badge-live" : "badge-submitted"
-          }`}
-        >
-          {profileReadyForPosting(profile) ? "Ready" : "Needed"}
+        <p className="text-[15px] font-semibold tracking-tight text-ink">
+          Seller profile
+        </p>
+        <span className={`stamp ${ready ? "badge-live" : "badge-submitted"}`}>
+          {loading ? "…" : ready ? "Ready" : "Needed"}
         </span>
       </div>
       <p className="mt-1.5 text-[13px] leading-relaxed text-grey">
-        City, ZIP, and pickup notes for posts. Sold will not invent an address.
+        City, postal code, and pickup notes for posts. Sold will not invent an
+        address.
       </p>
       <div className="mt-4 grid gap-3">
         <label className="field">
@@ -69,6 +72,7 @@ export function SellerProfileCard() {
             name="name"
             defaultValue={profile.name}
             placeholder="how buyers should know you"
+            disabled={loading}
           />
         </label>
         <div className="grid grid-cols-2 gap-3">
@@ -78,16 +82,18 @@ export function SellerProfileCard() {
               key={`city:${profile.city}`}
               name="city"
               defaultValue={profile.city}
-              placeholder="Brooklyn"
+              placeholder="Toronto"
+              disabled={loading}
             />
           </label>
           <label className="field">
-            ZIP
+            Postal code
             <input
               key={`zip:${profile.zip}`}
               name="zip"
               defaultValue={profile.zip}
-              placeholder="11215"
+              placeholder="M5V 2T6"
+              disabled={loading}
             />
           </label>
         </div>
@@ -98,6 +104,7 @@ export function SellerProfileCard() {
             name="neighborhood"
             defaultValue={profile.neighborhood}
             placeholder="optional"
+            disabled={loading}
           />
         </label>
         <label className="field">
@@ -106,13 +113,23 @@ export function SellerProfileCard() {
             key={`pickup:${profile.pickup_notes}`}
             name="pickup_notes"
             defaultValue={profile.pickup_notes}
-            placeholder="weekends, sidewalk, after 6…"
+            placeholder="weekends, lobby, after 6…"
+            disabled={loading}
           />
         </label>
       </div>
-      {error && <p className="mt-3 text-[13px] text-stamp">{error}</p>}
-      {saved && <p className="mt-3 text-[13px] text-ledger">Saved.</p>}
-      <button type="submit" disabled={busy} className="btn-primary mt-4 h-10 w-full text-[13px]">
+      {error ? <p className="mt-3 text-[13px] text-stamp">{error}</p> : null}
+      {saved ? <p className="mt-3 text-[13px] text-ledger">Saved.</p> : null}
+      {!ready && !loading ? (
+        <p className="mt-3 text-[12px] text-grey">
+          Add city and postal code before marketplace posts can go out.
+        </p>
+      ) : null}
+      <button
+        type="submit"
+        disabled={busy || loading}
+        className="btn-primary mt-4 h-10 w-full text-[13px]"
+      >
         {busy ? "Saving…" : "Save profile"}
       </button>
     </form>

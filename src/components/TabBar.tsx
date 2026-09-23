@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 
 export function TabBar() {
   const pathname = usePathname() || "";
+  const listingsActive =
+    pathname === "/listings" || pathname.startsWith("/listings/");
 
   return (
     <nav className="tab-bar safe-bottom absolute inset-x-0 bottom-0 z-30 border-t border-line">
       <div className="mx-auto grid h-[3.75rem] max-w-md grid-cols-3 items-center px-2">
-        <Tab href="/listings" label="Listings" active={pathname === "/listings"} />
+        <Tab href="/listings" label="Listings" active={listingsActive} />
         <Link href="/new" aria-label="New listing" className="tab-bar__new mx-auto">
           +
         </Link>

@@ -16,7 +16,9 @@ export function LlmWarning() {
 
   return (
     <p className="border-t border-line bg-wash/80 px-5 py-2 text-center text-[12px] text-grey">
-      Add an API key in <span className="font-medium text-ink">.env</span> to run Sold Agent.
+      Add <span className="font-medium text-ink">OPENAI_API_KEY</span> or{" "}
+      <span className="font-medium text-ink">ANTHROPIC_API_KEY</span> in{" "}
+      <span className="font-medium text-ink">.env.local</span> to run the agents.
     </p>
   );
 }

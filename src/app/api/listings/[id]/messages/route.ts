@@ -49,7 +49,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
       if (listing.status !== "live" && listing.status !== "sold") {
         return NextResponse.json(
-          { error: "Listing must be live before you can stamp a sale." },
+          { error: "Listing must be live before you can approve a sale." },
           { status: 400 }
         );
       }
@@ -62,7 +62,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         sender: "human",
         text: "Stamped accept — marked sold.",
         action: "accept",
-        decision: "Seller stamped the accept draft.",
+        decision: "Seller approved the accept draft.",
         escalate: false,
         escalate_reason: "",
         timestamp: new Date().toISOString(),
@@ -71,7 +71,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         id,
         "negotiator",
         "STAMP",
-        `Seller stamped accept for ${draft.buyer_name || "buyer"}. Marked sold.`
+        `Seller approved accept for ${draft.buyer_name || "buyer"}. Marked sold.`
       );
       return NextResponse.json({
         listing: await getListing(id),
@@ -151,7 +151,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         id,
         "negotiator",
         "DRAFT",
-        "Accept draft ready. Waiting for your stamp before marking sold."
+        "Accept draft ready. Waiting for your approval before marking sold."
       );
     }
 
