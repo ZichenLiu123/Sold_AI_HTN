@@ -15,13 +15,13 @@ function threadState(last: {
   escalate_reason: string;
   sender: string;
 } | null) {
-  if (!last) return "no messages yet";
+  if (!last) return "No messages yet";
   if (last.sender === "agent" && last.action === "accept") {
-    return "needs your approval · accept draft";
+    return "Needs approval · accept draft";
   }
-  if (last.escalate) return "needs you";
-  if (last.action) return `draft · ${last.action}`;
-  return "waiting";
+  if (last.escalate) return "Needs you";
+  if (last.action) return `Draft · ${last.action}`;
+  return "Waiting";
 }
 
 export default async function InboxPage() {

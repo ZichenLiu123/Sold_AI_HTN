@@ -1907,7 +1907,7 @@ function ChatView({
         ))}
         {busy === "chat" && (
           <p className="text-[12px] font-medium text-sold">
-            Negotiator deciding…
+            Drafting reply…
           </p>
         )}
         <div ref={chatEnd} />
@@ -1933,7 +1933,7 @@ function ChatView({
             onClick={onActivity}
             className="min-w-0 truncate text-[12px] font-medium text-grey"
           >
-            {lastAgent ? `${lastAgent.action} · activity` : "Activity"}
+            {lastAgent ? `Activity · ${lastAgent.action}` : "Activity"}
           </button>
           <div className="flex shrink-0 rounded-lg border border-line bg-wash p-0.5 text-[12px] font-semibold">
             <label className={`cursor-pointer px-2 py-1 ${sender === "buyer" ? "bg-ink text-paper" : "text-grey"}`}>
@@ -1985,7 +1985,7 @@ function ChatView({
               watchingFacebook
                 ? "Monitor-only — reply on Facebook"
                 : sender === "human"
-                  ? "Your reply (stays in Sold until you send on the marketplace)…"
+                  ? "Your reply — stays in Sold until you send it"
                   : `Message as ${buyerName}…`
             }
             disabled={watchingFacebook}
@@ -2487,16 +2487,18 @@ function AgentLog({
 
 function busyLabel(busy: string) {
   return busy === "chat"
-    ? "Negotiator deciding…"
-    : busy === "lister"
-      ? "Sold Agent working…"
-      : busy === "revise"
-        ? "Updating live listing…"
-        : busy === "takedown"
-          ? "Taking down…"
-          : busy === "reject"
-            ? "Rejecting…"
-            : "Posting…";
+    ? "Drafting reply…"
+    : busy === "stamp"
+      ? "Approving sale…"
+      : busy === "lister"
+        ? "Sold Agent working…"
+        : busy === "revise"
+          ? "Updating live listing…"
+          : busy === "takedown"
+            ? "Taking down…"
+            : busy === "reject"
+              ? "Rejecting…"
+              : "Posting…";
 }
 
 function Row({ k, v }: { k: string; v: string }) {
@@ -2652,7 +2654,7 @@ function Bubble({
             disabled={stampBusy}
             className="mt-3 inline-flex items-center gap-2 border border-stamp/40 bg-paper px-3 py-1.5 text-[12px] font-medium text-stamp disabled:opacity-50"
           >
-            {stampBusy ? "Approving…" : "Approve accept · mark sold"}
+            {stampBusy ? "Approving…" : "Approve · mark as sold"}
           </button>
         )}
       </div>

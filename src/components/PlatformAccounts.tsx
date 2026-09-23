@@ -312,16 +312,28 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
                   <p className="mt-2 text-[12px] text-stamp">{connection.error}</p>
                 )}
                 {connected ? (
-                  <button
-                    type="button"
-                    onClick={() => void disconnect(connection)}
-                    disabled={Boolean(busy)}
-                    className="btn-secondary mt-3 h-10 w-full text-[13px]"
-                  >
-                    {busy === `${connection.platform}:disconnect`
-                      ? "Disconnecting…"
-                      : "Disconnect"}
-                  </button>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void check(connection)}
+                      disabled={Boolean(busy)}
+                      className="btn-secondary h-10 text-[13px]"
+                    >
+                      {busy === `${connection.platform}:check`
+                        ? "Checking…"
+                        : "Recheck"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void disconnect(connection)}
+                      disabled={Boolean(busy)}
+                      className="btn-secondary h-10 text-[13px]"
+                    >
+                      {busy === `${connection.platform}:disconnect`
+                        ? "Disconnecting…"
+                        : "Disconnect"}
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"

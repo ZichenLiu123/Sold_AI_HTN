@@ -6,6 +6,28 @@ import { FormEvent, Suspense, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SoldMark } from "@/components/SoldMark";
 
+
+function friendlyAuthError(reason: unknown, kind: "signin" | "signup" | "magic") {
+  const raw = reason instanceof Error ? reason.message : "";
+  const lower = raw.toLowerCase();
+  if (lower.includes("invalid login") || lower.includes("invalid credentials")) {
+    return "Wrong email or password.";
+  }
+  if (lower.includes("email not confirmed")) {
+    return "Confirm your email, then try again.";
+  }
+  if (lower.includes("user already registered") || lower.includes("already been registered")) {
+    return "That email already has an account — sign in instead.";
+  }
+  if (lower.includes("rate limit") || lower.includes("too many")) {
+    return "Too many attempts. Wait a minute and try again.";
+  }
+  if (raw) return raw;
+  if (kind === "magic") return "Could not send magic link.";
+  if (kind === "signup") return "Could not create account.";
+  return "Could not sign in.";
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -22,14 +44,14 @@ function LoginForm() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"signin" | "signup" | "magic" | false>(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (!configured) return;
-    setBusy(true);
+    setBusy(mode);
     setError("");
     setMessage("");
     const supabase = createClient();
@@ -65,7 +87,7 @@ function LoginForm() {
         router.refresh();
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not sign in.");
+      setError(friendlyAuthError(reason, mode === "signup" ? "signup" : "signin"));
     } finally {
       setBusy(false);
     }
@@ -77,7 +99,7 @@ function LoginForm() {
       setError("Enter your email first.");
       return;
     }
-    setBusy(true);
+    setBusy("magic");
     setError("");
     setMessage("");
     const supabase = createClient();
@@ -91,9 +113,7 @@ function LoginForm() {
       if (linkError) throw linkError;
       setMessage("Magic link sent — open it on this device to continue.");
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Could not send magic link."
-      );
+      setError(friendlyAuthError(reason, "magic"));
     } finally {
       setBusy(false);
     }
@@ -112,7 +132,7 @@ function LoginForm() {
           the app.
         </p>
         <Link href="/listings" className="btn-primary mt-8 w-full text-center">
-          Continue in local demo mode
+          Continue without an account
         </Link>
         <Link
           href="/"
@@ -170,22 +190,24 @@ function LoginForm() {
           </p>
         ) : null}
 
-        <button type="submit" disabled={busy} className="btn-primary mt-1 w-full">
-          {busy
-            ? "Working…"
-            : mode === "signin"
-              ? "Sign in"
-              : "Create account"}
+        <button type="submit" disabled={Boolean(busy)} className="btn-primary mt-1 w-full">
+          {busy === "signin"
+            ? "Signing in…"
+            : busy === "signup"
+              ? "Creating account…"
+              : mode === "signin"
+                ? "Sign in"
+                : "Create account"}
         </button>
       </form>
 
       <button
         type="button"
-        disabled={busy}
+        disabled={Boolean(busy)}
         onClick={() => void sendMagicLink()}
         className="btn-secondary mt-3 w-full"
       >
-        Email me a magic link
+        {busy === "magic" ? "Sending link…" : "Email me a magic link"}
       </button>
 
       <p className="mt-6 text-center text-[13px] text-grey">
