@@ -1,4 +1,4 @@
-import { insertMessage, listMessages, logAgent, updateListing } from "../db";
+import { insertMessage, listMessages, logAgent } from "../db";
 import type { Listing, Platform } from "../types";
 import { runNegotiator } from "../agents/graph";
 import {
@@ -71,7 +71,12 @@ export async function recordMarketplaceInbound(
     timestamp: new Date().toISOString(),
   });
   if (result.action === "accept") {
-    await updateListing(listing.id, { status: "sold", pipeline_stage: "Sold" });
+    await logAgent(
+      listing.id,
+      "negotiator",
+      "DRAFT",
+      `Accept draft for ${thread.buyer} on ${platform}. Waiting for stamp — not marked sold.`
+    );
   }
   if (result.escalate) {
     await logAgent(

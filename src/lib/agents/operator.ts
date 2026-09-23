@@ -10,8 +10,10 @@ import {
   classifyFormPage,
   describeStuck,
   blockedOperatorTarget,
+  deterministicAction,
   labelAction,
   listingAlreadyTakenDown,
+  operatorNeedsScreenshot,
   parseOperatorAction,
   refineAction,
   shouldOpenEditorAfterStuck,
@@ -175,7 +177,7 @@ export async function operateListingForm(
   const profile = await getSellerProfile();
   const place = { location: sellerPlace(profile), zip: profile.zip.trim() };
   const revise = goal?.mode === "revise" || goal?.mode === "takedown";
-  const limit = revise ? 16 : platform === "eBay" ? 28 : platform === "Craigslist" ? 18 : 14;
+  const limit = revise ? 12 : platform === "eBay" ? 16 : platform === "Craigslist" ? 12 : 10;
   const disarmPhotos = armPhotoChooser(page, listing);
   let lastOutcome = "";
   try {
@@ -212,8 +214,23 @@ export async function operateListingForm(
         lastOutcome = "Operator stayed on the wrong page after two tries. Opening the editor, then asking again.";
         await logAgent(listing.id, "browser", "FORM", lastOutcome);
       } else {
-        decision = await askOperator(page, listing, platform, place, goal, sight, history, lastOutcome);
-        decision = refineAction(decision, sight, listing, goal, history);
+        const cheap = deterministicAction(sight, listing, goal, history);
+        if (cheap) {
+          decision = cheap;
+          lastOutcome = `Filled “${cheap.action === "type" ? cheap.target : cheap.action}” without an LLM call.`;
+        } else {
+          decision = await askOperator(
+            page,
+            listing,
+            platform,
+            place,
+            goal,
+            sight,
+            history,
+            lastOutcome
+          );
+          decision = refineAction(decision, sight, listing, goal, history);
+        }
       }
 
       if (decision.action === "rejected") {
@@ -396,7 +413,11 @@ async function askOperator(
   lastOutcome: string
 ): Promise<OperatorAction> {
   const stuck = describeStuck(history, sight, lastOutcome);
-  const shot = await page.screenshot({ type: "jpeg", quality: 50, fullPage: false });
+  const needShot = operatorNeedsScreenshot(history, sight, lastOutcome);
+  const shot = needShot
+    ? await page.screenshot({ type: "jpeg", quality: 42, fullPage: false })
+    : null;
+  if (shot) history.push("shot");
   const raw = await complete({
     system: OPERATOR_SYSTEM,
     text: [
@@ -406,18 +427,23 @@ async function askOperator(
       operatorFacts(listing, platform, place, goal),
       `Empty fields: ${sight.empty.join(", ") || "none visible"}`,
       `Errors: ${sight.errors.join(" | ") || "none"}`,
-      `Visible controls: ${sight.choices.join(" | ") || "(none read)"}`,
-      `Already did: ${history.filter((item) => !item.startsWith("outcome:")).join(" → ") || "nothing"}`,
+      `Visible controls: ${sight.choices.slice(0, 40).join(" | ") || "(none read)"}`,
+      `Already did: ${history.filter((item) => !item.startsWith("outcome:") && item !== "shot").join(" → ") || "nothing"}`,
       stuck || "Not stuck.",
+      shot
+        ? "A screenshot is attached — use it."
+        : "No screenshot this turn (cost). Prefer Empty fields and Visible controls. Ask again only if ambiguous.",
     ].join("\n"),
-    images: [
-      {
-        media_type: "image/jpeg",
-        data: shot.toString("base64"),
-        detail: "low",
-      },
-    ],
-    maxTokens: 250,
+    images: shot
+      ? [
+          {
+            media_type: "image/jpeg",
+            data: shot.toString("base64"),
+            detail: "low",
+          },
+        ]
+      : undefined,
+    maxTokens: 180,
   });
   return parseOperatorAction(raw);
 }

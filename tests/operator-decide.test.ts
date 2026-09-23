@@ -4,8 +4,10 @@ import {
   blockedOperatorTarget,
   classifyFormPage,
   describeStuck,
+  deterministicAction,
   forbiddenTarget,
   listingAlreadyTakenDown,
+  operatorNeedsScreenshot,
   parseOperatorAction,
   refineAction,
   requestedPrice,
@@ -156,5 +158,49 @@ test("tells the operator it is stuck on the wrong page", () => {
       sight({ kind: "public" })
     ),
     false
+  );
+});
+
+test("fills empty title and price without an LLM call", () => {
+  const first = deterministicAction(
+    sight({ empty: ["Posting title", "Price"] }),
+    listing,
+    { mode: "create" },
+    []
+  );
+  assert.deepEqual(first, {
+    action: "type",
+    target: "Posting title",
+    text: listing.title,
+  });
+  const second = deterministicAction(
+    sight({ empty: ["Posting title", "Price"] }),
+    listing,
+    { mode: "create" },
+    ["type:Posting title"]
+  );
+  assert.deepEqual(second, {
+    action: "type",
+    target: "Price",
+    text: "50",
+  });
+  assert.equal(
+    deterministicAction(sight({ empty: ["Posting title"] }), listing, { mode: "takedown" }, []),
+    null
+  );
+});
+
+test("only requests a screenshot when the operator is stuck", () => {
+  assert.equal(
+    operatorNeedsScreenshot([], sight({ kind: "editor" }), ""),
+    false
+  );
+  assert.equal(
+    operatorNeedsScreenshot(
+      ["miss:Publish", "miss:Next"],
+      sight({ kind: "editor" }),
+      "Could not click “Publish”."
+    ),
+    true
   );
 });

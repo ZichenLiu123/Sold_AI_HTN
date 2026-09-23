@@ -8,7 +8,7 @@ import type {
 } from "../types";
 import { extractJson, itemSize, roundClean } from "../util";
 
-export const LISTER_SYSTEM_PROMPT = `You write marketplace listings people actually post — Facebook Marketplace, Craigslist, not a lab notebook.
+export const LISTER_SYSTEM_PROMPT = `You write marketplace listings people actually post — Facebook Marketplace, Kijiji, OfferUp, Craigslist, Mercari, Poshmark, eBay — not a lab notebook.
 
 You receive item facts from the photo (brand, size, condition, flaws) and optional seller notes. Comp prices may be missing.
 
@@ -17,7 +17,7 @@ Write:
 - description: 2–4 short sentences a seller would type on their phone.
 - suggested_price: verified comp median, or the seller’s asking price. If neither exists, 0. Never invent a price.
 - price_reasoning: 1–2 sentences
-- suggested_platforms: from [Facebook Marketplace, Craigslist, eBay]. Clothing → Facebook Marketplace. Furniture/large items → Facebook + Craigslist. Food, drinks, groceries, household consumables → Facebook + Craigslist. Electronics/collectibles → eBay.
+- suggested_platforms: from [Facebook Marketplace, Kijiji, OfferUp, Craigslist, Mercari, Poshmark, eBay]. Clothing/fashion → Facebook + Poshmark (+ Mercari). Furniture/large local items → Facebook + Kijiji + OfferUp + Craigslist. Food/drinks/household consumables → Facebook + Kijiji + OfferUp. Electronics/collectibles → eBay + Mercari + Facebook.
 
 Description rules:
 - Lead with what someone is buying: brand, product, size, flavor if obvious.
@@ -40,7 +40,11 @@ Output valid JSON only:
 
 const ALLOWED: Platform[] = [
   "Facebook Marketplace",
+  "Kijiji",
+  "OfferUp",
   "Craigslist",
+  "Mercari",
+  "Poshmark",
   "eBay",
 ];
 
@@ -124,14 +128,17 @@ export async function generateListingCopy(
 
 function fallbackPlatforms(category: string): Platform[] {
   const c = category.toLowerCase();
-  if (/(cloth|apparel|shoe|sneaker|bag|access)/.test(c)) {
-    return ["Facebook Marketplace"];
+  if (/(cloth|apparel|shoe|sneaker|bag|access|fashion|dress|jacket)/.test(c)) {
+    return ["Facebook Marketplace", "Poshmark", "Mercari"];
   }
   if (/(furniture|sofa|table|chair|mattress|appliance)/.test(c)) {
-    return ["Facebook Marketplace", "Craigslist"];
+    return ["Facebook Marketplace", "Kijiji", "OfferUp", "Craigslist"];
   }
   if (/(juice|grocery|food|drink|beverage|snack|water)/.test(c)) {
-    return ["Facebook Marketplace", "Craigslist"];
+    return ["Facebook Marketplace", "Kijiji", "OfferUp"];
   }
-  return ["eBay", "Facebook Marketplace"];
+  if (/(phone|laptop|camera|console|collect|card|watch|electronic)/.test(c)) {
+    return ["eBay", "Mercari", "Facebook Marketplace"];
+  }
+  return ["Facebook Marketplace", "OfferUp", "Kijiji", "eBay"];
 }

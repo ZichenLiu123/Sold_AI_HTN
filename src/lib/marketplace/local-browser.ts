@@ -1,8 +1,9 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { chromium, type BrowserContext, type Page } from "playwright-core";
 import type { Platform } from "../types";
 import { platformSlug } from "../platforms";
+import { sellerId } from "../seller-context";
 
 export type LocalChromeJob = "idle" | "login" | "post" | "monitor";
 
@@ -22,8 +23,31 @@ function headlessCache() {
   return globalLocal.soldLocalHeadless;
 }
 
+function cacheKey(platform: Platform) {
+  return `${sellerId()}:${platform}`;
+}
+
 export function localProfileDir(platform: Platform) {
-  return path.join(process.cwd(), "data", "chrome-profiles", platformSlug(platform));
+  const scoped = path.join(
+    process.cwd(),
+    "data",
+    "chrome-profiles",
+    sellerId(),
+    platformSlug(platform)
+  );
+  // Keep using the pre-auth profile folder when it already has a session.
+  const legacy = path.join(
+    process.cwd(),
+    "data",
+    "chrome-profiles",
+    platformSlug(platform)
+  );
+  try {
+    if (!existsSync(scoped) && existsSync(legacy)) return legacy;
+  } catch {
+    /* fall through */
+  }
+  return scoped;
 }
 
 export function isLocalConnection(metadata: Record<string, string>) {
@@ -61,22 +85,23 @@ async function contextFor(
   platform: Platform,
   headless: boolean
 ): Promise<BrowserContext> {
+  const key = cacheKey(platform);
   const cache = contextCache();
   const flags = headlessCache();
-  let context = cache.get(platform);
-  if (context && flags.get(platform) !== headless) {
+  let context = cache.get(key);
+  if (context && flags.get(key) !== headless) {
     await context.close().catch(() => undefined);
-    cache.delete(platform);
-    flags.delete(platform);
+    cache.delete(key);
+    flags.delete(key);
     context = undefined;
   }
   if (!context) {
     context = await launchProfile(platform, headless);
-    cache.set(platform, context);
-    flags.set(platform, headless);
+    cache.set(key, context);
+    flags.set(key, headless);
     context.on("close", () => {
-      cache.delete(platform);
-      flags.delete(platform);
+      cache.delete(key);
+      flags.delete(key);
     });
   }
   return context;

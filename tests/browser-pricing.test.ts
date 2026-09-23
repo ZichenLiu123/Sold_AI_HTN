@@ -27,7 +27,37 @@ test("builds descriptive primary and broader alternate queries", () => {
   const queries = buildCompQueries(giftBox);
   assert.equal(queries.primary, "blue ribbon closure gift box");
   assert.equal(queries.alternate, "blue gift box");
+  assert.equal(queries.google, "blue ribbon closure gift box");
   assert.doesNotMatch(queries.primary, /\bgood\b/);
+});
+
+test("prefers vision search_query as the Google Shopping prompt", () => {
+  const queries = buildCompQueries({
+    category: "water bottle",
+    brand: "Owala",
+    model: "FreeSip",
+    condition: "like new",
+    flaws: [],
+    color: "gray",
+    notable_features: [],
+    visible_text: ["OWALA", "32 OZ"],
+    search_query: "Owala FreeSip 32oz water bottle",
+    confidence: "high",
+  });
+  assert.equal(queries.google, "Owala FreeSip 32oz water bottle");
+  assert.equal(queries.primary, "Owala FreeSip 32oz water bottle");
+  assert.doesNotMatch(queries.google, /like new|gray/i);
+});
+
+test("strips sale fluff from vision search queries", async () => {
+  const { normalizeGoogleQuery } = await import("../src/lib/agents/search-query.ts");
+  assert.equal(
+    normalizeGoogleQuery("Owala FreeSip 32oz for sale used cheap", [
+      "Owala",
+      "FreeSip",
+    ]),
+    "Owala FreeSip 32oz"
+  );
 });
 
 test("searches brand and model from OCR before generic color words", () => {
@@ -123,21 +153,21 @@ test("keeps relevant URL-backed comps and removes duplicate URLs and outliers", 
   );
 });
 
-test("keeps OpenAI web prices only when the URL was cited", () => {
+test("keeps Web search prices only when the URL was cited", () => {
   const kept = filterCitedListings(
     [
       {
         title: "Owala FreeSip 32oz",
         price: 18,
         url: "https://www.ebay.com/itm/123",
-        source: "OpenAI web",
+        source: "Web search",
         sold: true,
       },
       {
         title: "Fake listing",
         price: 189,
         url: "https://example.com/nope",
-        source: "OpenAI web",
+        source: "Web search",
         sold: false,
       },
     ],
@@ -149,14 +179,14 @@ test("keeps OpenAI web prices only when the URL was cited", () => {
   );
 });
 
-test("drops OpenAI listings when the model returned no citations", () => {
+test("drops Web search listings when the model returned no citations", () => {
   const kept = filterCitedListings(
     [
       {
         title: "Owala FreeSip 32oz",
         price: 189,
         url: "https://www.ebay.com/itm/invented",
-        source: "OpenAI web",
+        source: "Web search",
         sold: false,
       },
     ],
@@ -165,7 +195,7 @@ test("drops OpenAI listings when the model returned no citations", () => {
   assert.equal(kept.length, 0);
 });
 
-test("merges Browserbase and OpenAI comps to a median", () => {
+test("merges Browserbase and Web search comps to a median", () => {
   const merged = mergeCompData(
     {
       source: "Mercari",
@@ -194,15 +224,15 @@ test("merges Browserbase and OpenAI comps to a median", () => {
       diagnostics: [],
     },
     {
-      source: "OpenAI web",
-      sources: ["OpenAI web"],
+      source: "Web search",
+      sources: ["Web search"],
       query: "Owala FreeSip 32oz",
       comps: [
         {
           title: "Owala FreeSip 32oz",
           price: 22,
           url: "https://www.ebay.com/itm/1",
-          source: "OpenAI web",
+          source: "Web search",
           sold: true,
         },
       ],
@@ -215,10 +245,10 @@ test("merges Browserbase and OpenAI comps to a median", () => {
   );
   assert.equal(merged.median, 20);
   assert.equal(merged.comps.length, 3);
-  assert.ok(merged.successful_sources?.includes("OpenAI web"));
+  assert.ok(merged.successful_sources?.includes("Web search"));
 });
 
-test("stops scraping only after five sold comps can lock the price", () => {
+test("stops scraping once three sold comps can lock the price", () => {
   const sold = (n: number) =>
     Array.from({ length: n }, (_, i) => ({
       title: `Owala FreeSip 32oz ${i}`,
@@ -227,8 +257,8 @@ test("stops scraping only after five sold comps can lock the price", () => {
       source: "eBay",
       sold: true,
     }));
-  assert.equal(enoughVerifiedComps(sold(5)), true);
-  assert.equal(enoughVerifiedComps(sold(4)), false);
+  assert.equal(enoughVerifiedComps(sold(3)), true);
+  assert.equal(enoughVerifiedComps(sold(2)), false);
   assert.equal(
     enoughVerifiedComps([
       {
@@ -271,7 +301,7 @@ test("stops scraping only after five sold comps can lock the price", () => {
   );
 });
 
-test("merge drops off-identity OpenAI listings when OCR tokens are required", () => {
+test("merge drops off-identity Web search listings when OCR tokens are required", () => {
   const merged = mergeCompData(
     {
       source: "Mercari",
@@ -300,22 +330,22 @@ test("merge drops off-identity OpenAI listings when OCR tokens are required", ()
       diagnostics: [],
     },
     {
-      source: "OpenAI web",
-      sources: ["OpenAI web"],
+      source: "Web search",
+      sources: ["Web search"],
       query: "Owala FreeSip 32oz",
       comps: [
         {
           title: "Random ceramic mug",
           price: 12,
           url: "https://www.ebay.com/itm/mug",
-          source: "OpenAI web",
+          source: "Web search",
           sold: false,
         },
         {
           title: "Owala FreeSip 32oz",
           price: 22,
           url: "https://www.ebay.com/itm/1",
-          source: "OpenAI web",
+          source: "Web search",
           sold: true,
         },
       ],

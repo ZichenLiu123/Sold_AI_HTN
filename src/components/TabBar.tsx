@@ -7,16 +7,11 @@ export function TabBar() {
   const pathname = usePathname() || "";
 
   return (
-    <nav className="tab-bar safe-bottom absolute inset-x-0 bottom-0 z-30 w-full border-t border-line bg-card/95 backdrop-blur">
-      <div className="grid grid-cols-3 items-end px-2 pt-2">
+    <nav className="tab-bar safe-bottom absolute inset-x-0 bottom-0 z-30 border-t border-line">
+      <div className="mx-auto grid h-[3.75rem] max-w-md grid-cols-3 items-center px-2">
         <Tab href="/listings" label="Listings" active={pathname === "/listings"} />
-        <Link href="/new" className="-mt-7 mb-1 flex flex-col items-center justify-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-sold text-lg text-paper shadow-lg">
-            +
-          </span>
-          <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-sold">
-            New
-          </span>
+        <Link href="/new" aria-label="New listing" className="tab-bar__new mx-auto">
+          +
         </Link>
         <Tab href="/inbox" label="Inbox" active={pathname.startsWith("/inbox")} />
       </div>
@@ -36,11 +31,10 @@ function Tab({
   return (
     <Link
       href={href}
-      className={`flex flex-col items-center pb-2 font-mono text-[10px] uppercase tracking-[0.16em] ${
-        active ? "text-ink" : "text-ink/40"
+      className={`flex h-full items-center justify-center text-[13px] font-semibold tracking-tight ${
+        active ? "text-ink" : "text-grey"
       }`}
     >
-      <span className={`mb-1 h-1 w-6 rounded-full ${active ? "bg-sold" : "bg-transparent"}`} />
       {label}
     </Link>
   );

@@ -3,16 +3,16 @@
 import { useEffect, useState } from "react";
 import { InboxWatchToggle } from "@/components/InboxWatchToggle";
 import { platformSlug } from "@/lib/platforms";
-import type { PlatformConnection } from "@/lib/types";
+import { PLATFORMS, type PlatformConnection } from "@/lib/types";
 
 type Connection = PlatformConnection & { live_url?: string | null };
 
 const STATUS_LABEL: Record<PlatformConnection["status"], string> = {
-  not_connected: "not connected",
-  awaiting_login: "awaiting login",
-  connected: "connected",
-  expired: "expired",
-  error: "error",
+  not_connected: "Not connected",
+  awaiting_login: "Awaiting login",
+  connected: "Connected",
+  expired: "Expired",
+  error: "Error",
 };
 
 function usesLocalLogin(platform: string) {
@@ -28,6 +28,38 @@ function onPhone() {
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
+function platformRegion(platform: string) {
+  if (platform === "Kijiji") return "Canada";
+  if (platform === "OfferUp") return "US";
+  if (platform === "Mercari" || platform === "Poshmark") return "US + Canada";
+  return "US + Canada";
+}
+
+function platformCapability(platform: string) {
+  if (platform === "Facebook Marketplace") {
+    return "Post + verify live URL. Inbox: monitor-only — drafts in Sold, you reply on Facebook.";
+  }
+  if (platform === "Kijiji") {
+    return `${platformRegion(platform)}. Post + verify. Canada’s main classifieds marketplace.`;
+  }
+  if (platform === "OfferUp") {
+    return `${platformRegion(platform)}. Post + verify. Local pickup marketplace.`;
+  }
+  if (platform === "Craigslist") {
+    return "Post + verify. Inbox: watch drafts replies in Sold; Sold does not send the email.";
+  }
+  if (platform === "Mercari") {
+    return `${platformRegion(platform)}. Post + verify. Ship-friendly used goods.`;
+  }
+  if (platform === "Poshmark") {
+    return `${platformRegion(platform)}. Post + verify. Fashion and closet resale.`;
+  }
+  if (platform === "eBay") {
+    return "Post + verify. Inbox: watch drafts replies in Sold; you send from eBay Messages.";
+  }
+  return "Connect to post and watch.";
+}
+
 function accountHint(
   connection: Connection,
   connected: boolean,
@@ -35,51 +67,92 @@ function accountHint(
   hosted: boolean
 ) {
   if (connected) {
-    return (
-      connection.metadata.evidence ||
-      "Connected. Sold watches your inbox. A chat appears only when a person writes you."
-    );
+    return connection.metadata.evidence || platformCapability(connection.platform);
   }
   if (waiting) {
     if (hosted) {
-      return "Finish login in the live browser tab, come back here, then tap I finished logging in.";
+      return "Finish login in the live browser tab — Sold will detect it automatically.";
     }
     if (usesLocalLogin(connection.platform) || onPhone()) {
-      return "Chrome opened on the computer running Sold — not on this phone. Log in there, then tap I finished logging in.";
+      return "Chrome opened on the computer running Sold — not on this phone. Log in there; Sold will detect it.";
     }
-    return "Finish login in the window that opened, then tap I finished logging in.";
+    return "Finish login in the window that opened — Sold will detect it automatically.";
   }
   if (hosted) {
     return "Opens a live browser tab so you can log in from this phone.";
   }
-  return "Log in once. Sold starts watching after that.";
+  return "Log in once. Sold reuses the session and does not store your password.";
 }
 
 export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [cloudHost, setCloudHost] = useState(hosted);
+  const [minutesSpent, setMinutesSpent] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   async function load() {
     const response = await fetch("/api/platforms", { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Could not load accounts.");
-    setConnections(data.connections);
+    setConnections(data.connections || []);
     if (typeof data.hosted === "boolean") setCloudHost(data.hosted);
+    if (typeof data.remote_minutes_exhausted === "boolean") {
+      setMinutesSpent(data.remote_minutes_exhausted);
+    }
   }
 
   useEffect(() => {
-    load().catch((reason) =>
-      setError(reason instanceof Error ? reason.message : "Could not load accounts.")
-    );
+    load()
+      .catch((reason) =>
+        setError(reason instanceof Error ? reason.message : "Could not load accounts.")
+      )
+      .finally(() => setLoading(false));
   }, []);
+
+  // While awaiting login, quietly re-check so Connect flips to Connected without a tap.
+  const waitingKey = connections
+    .filter((c) => c.status === "awaiting_login")
+    .map((c) => c.platform)
+    .join("|");
+
+  useEffect(() => {
+    if (!waitingKey || loading) return;
+    let cancelled = false;
+    const platforms = waitingKey.split("|").filter(Boolean);
+    const tick = async () => {
+      for (const platform of platforms) {
+        if (cancelled) continue;
+        try {
+          const response = await fetch(
+            `/api/platforms/${platformSlug(platform)}/check`,
+            { method: "POST" }
+          );
+          const data = await response.json();
+          if (!response.ok || cancelled) continue;
+          setConnections((current) =>
+            current.map((item) => (item.platform === data.platform ? data : item))
+          );
+          if (data.status === "connected") setBusy("");
+        } catch {
+          /* keep polling */
+        }
+      }
+    };
+    const id = window.setInterval(() => void tick(), 2500);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [waitingKey, loading]);
 
   async function watchLocalLogin(platform: string) {
     const slug = platformSlug(platform);
     const started = Date.now();
     while (Date.now() - started < 180_000) {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       try {
         const response = await fetch(`/api/platforms/${slug}/check`, { method: "POST" });
         const data = await response.json();
@@ -87,11 +160,15 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
         setConnections((current) =>
           current.map((item) => (item.platform === data.platform ? data : item))
         );
-        if (data.status === "connected") return;
+        if (data.status === "connected") {
+          setBusy("");
+          return;
+        }
       } catch {
         /* keep waiting while the seller finishes login */
       }
     }
+    setBusy("");
   }
 
   async function connectLocal(connection: Connection) {
@@ -116,7 +193,10 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
     setBusy(connection.platform);
     void (async () => {
       try {
-        if (usesLocalLogin(connection.platform)) {
+        if (
+          usesLocalLogin(connection.platform) ||
+          (minutesSpent && connection.platform === "Craigslist")
+        ) {
           await connectLocal(connection);
           return;
         }
@@ -171,62 +251,106 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
   return (
     <>
       <InboxWatchToggle />
-      {error && <p className="mt-4 rounded-xl bg-wash px-3 py-2 text-sm text-sold">{error}</p>}
-      <ul className="mt-6 space-y-3">
-        {connections.map((connection) => {
-          const waiting = connection.status === "awaiting_login";
-          const connected = connection.status === "connected";
-          return (
-            <li key={connection.platform} className="rounded-2xl bg-card px-4 py-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-serif text-xl">{connection.platform}</p>
-                <span className={`stamp ${connected ? "text-sage" : waiting ? "text-gold" : "text-ink/50"}`}>
-                  {STATUS_LABEL[connection.status]}
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-ink/60">
-                {accountHint(connection, connected, waiting, cloudHost)}
-              </p>
-              {connection.error && <p className="mt-2 text-xs text-sold">{connection.error}</p>}
-              {connected ? (
-                <button
-                  type="button"
-                  onClick={() => void disconnect(connection)}
-                  disabled={Boolean(busy)}
-                  className="mt-3 h-10 w-full rounded-full border border-line px-3 text-xs disabled:opacity-50"
-                >
-                  {busy === `${connection.platform}:disconnect`
-                    ? "Disconnecting…"
-                    : "Disconnect"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => connect(connection)}
-                  disabled={Boolean(busy)}
-                  className="mt-3 h-10 w-full rounded-full bg-ink px-3 text-xs text-paper disabled:opacity-50"
-                >
-                  {busy === connection.platform
-                    ? "Opening…"
-                    : waiting
-                      ? "Open login again"
-                      : "Connect"}
-                </button>
-              )}
-              {waiting && (
-                <button
-                  type="button"
-                  onClick={() => void check(connection)}
-                  disabled={Boolean(busy)}
-                  className="mt-2 h-10 w-full rounded-full border border-sage text-xs text-sage disabled:opacity-40"
-                >
-                  I finished logging in
-                </button>
-              )}
+      {minutesSpent && !cloudHost && (
+        <p className="mt-4 rounded-xl border border-line bg-wash px-3.5 py-2.5 text-[13px] text-grey">
+          Remote browser minutes are used up. Craigslist will open in Chrome on this
+          Mac instead of Browserbase.
+        </p>
+      )}
+      {minutesSpent && cloudHost && (
+        <p className="mt-4 rounded-xl border border-line bg-wash px-3.5 py-2.5 text-[13px] text-grey">
+          Remote browser minutes are used up. Connect Craigslist from Sold on a laptop
+          with Chrome, or wait until minutes reset.
+        </p>
+      )}
+      {error && (
+        <p className="mt-4 rounded-xl border border-line bg-wash px-3.5 py-2.5 text-[13px] text-stamp">
+          {error}
+        </p>
+      )}
+      {loading ? (
+        <ul className="mt-6 space-y-3">
+          {PLATFORMS.map((name) => (
+            <li key={name} className="panel px-4 py-4">
+              <p className="text-[16px] font-semibold tracking-tight text-ink">{name}</p>
+              <p className="mt-1.5 text-[12px] text-grey">Checking session…</p>
+              <div className="mt-3 h-10 w-full animate-pulse rounded-lg bg-wash" />
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
+      ) : connections.length === 0 ? (
+        <p className="mt-6 rounded-xl border border-line bg-wash px-4 py-4 text-[14px] text-grey">
+          No marketplace slots yet. Refresh, or restart Sold.
+        </p>
+      ) : (
+        <ul className="mt-6 space-y-3">
+          {connections.map((connection) => {
+            const waiting = connection.status === "awaiting_login";
+            const connected = connection.status === "connected";
+            return (
+              <li key={connection.platform} className="panel px-4 py-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[16px] font-semibold tracking-tight text-ink">
+                    {connection.platform}
+                  </p>
+                  <span
+                    className={`stamp ${
+                      connected
+                        ? "badge-live"
+                        : waiting
+                          ? "badge-submitted"
+                          : "badge-draft"
+                    }`}
+                  >
+                    {STATUS_LABEL[connection.status]}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-grey">
+                  {accountHint(connection, connected, waiting, cloudHost)}
+                </p>
+                {connection.error && (
+                  <p className="mt-2 text-[12px] text-stamp">{connection.error}</p>
+                )}
+                {connected ? (
+                  <button
+                    type="button"
+                    onClick={() => void disconnect(connection)}
+                    disabled={Boolean(busy)}
+                    className="btn-secondary mt-3 h-10 w-full text-[13px]"
+                  >
+                    {busy === `${connection.platform}:disconnect`
+                      ? "Disconnecting…"
+                      : "Disconnect"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => connect(connection)}
+                    disabled={Boolean(busy)}
+                    className="btn-primary mt-3 h-10 w-full text-[13px]"
+                  >
+                    {busy === connection.platform
+                      ? "Opening…"
+                      : waiting
+                        ? "Open login again"
+                        : `Connect ${connection.platform.replace(" Marketplace", "")}`}
+                  </button>
+                )}
+                {waiting && (
+                  <button
+                    type="button"
+                    onClick={() => void check(connection)}
+                    disabled={Boolean(busy)}
+                    className="btn-secondary mt-2 h-10 w-full text-[13px]"
+                  >
+                    I finished logging in
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </>
   );
 }

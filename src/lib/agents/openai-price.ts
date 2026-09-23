@@ -36,14 +36,16 @@ export async function lookupOpenAIMarketPrice(
     .replace(/\b(bottle|bottles|box|boxes|container|can|cans)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const identity = [brandModel, size, brandModel ? category : ""]
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const query = identity || [attributes.color, attributes.category].filter(Boolean).join(" ");
+  const query =
+    (attributes.search_query || "").trim() ||
+    [brandModel, size, brandModel ? category : ""]
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim() ||
+    [attributes.color, attributes.category].filter(Boolean).join(" ");
   const empty = (): CompData => ({
-    source: "OpenAI web",
+    source: "Web search",
     sources: [],
     query,
     comps: [],
@@ -52,34 +54,37 @@ export async function lookupOpenAIMarketPrice(
     median: null,
     mocked: false,
     confidence: "none",
-    failure_reason: brandModel
-      ? "OpenAI web search did not return cited product URLs with prices."
+    failure_reason: brandModel || attributes.search_query
+      ? "Web search did not return cited product URLs with prices."
       : "No printed model to look up.",
-    attempted_sources: ["OpenAI web"],
+    attempted_sources: ["Web search"],
     successful_sources: [],
     diagnostics: [
       {
-        source: "OpenAI web",
-        attempted: Boolean(brandModel),
+        source: "Web search",
+        attempted: Boolean(brandModel || attributes.search_query),
         successful: false,
-        attempts: brandModel ? 1 : 0,
+        attempts: brandModel || attributes.search_query ? 1 : 0,
         found: 0,
-        reason: brandModel
+        reason: brandModel || attributes.search_query
           ? "No cited URL-backed prices"
-          : "Skipped until brand or model is identified",
+          : "Skipped until brand, model, or search query is identified",
       },
     ],
     pricing_basis: "none",
   });
 
-  if (!brandModel || !process.env.OPENAI_API_KEY) return empty();
+  if ((!brandModel && !attributes.search_query) || !process.env.OPENAI_API_KEY) {
+    return empty();
+  }
 
   const { text, urls } = await completeDetailed({
     system: PRICE_PROMPT,
     maxTokens: 1600,
     webSearch: true,
     text: JSON.stringify({
-      product: identity,
+      google_query: query,
+      product: brandModel || query,
       category: attributes.category,
       condition: attributes.condition,
       color: attributes.color,
@@ -98,7 +103,7 @@ export async function lookupOpenAIMarketPrice(
         title: String(row.title).slice(0, 180),
         price,
         url: String(row.url),
-        source: "OpenAI web",
+        source: "Web search",
         sold: Boolean(row.sold),
       } satisfies CompListing;
     })
@@ -106,8 +111,8 @@ export async function lookupOpenAIMarketPrice(
 
   const comps = filterCitedListings(raw, urls);
   return {
-    source: "OpenAI web",
-    sources: comps.length ? ["OpenAI web"] : [],
+    source: "Web search",
+    sources: comps.length ? ["Web search"] : [],
     query,
     comps,
     min: comps.length ? Math.min(...comps.map((row) => row.price)) : null,
@@ -118,12 +123,12 @@ export async function lookupOpenAIMarketPrice(
     failure_reason:
       comps.length > 0
         ? null
-        : "OpenAI web search did not return cited product URLs with prices.",
-    attempted_sources: ["OpenAI web"],
-    successful_sources: comps.length ? ["OpenAI web"] : [],
+        : "Web search did not return cited product URLs with prices.",
+    attempted_sources: ["Web search"],
+    successful_sources: comps.length ? ["Web search"] : [],
     diagnostics: [
       {
-        source: "OpenAI web",
+        source: "Web search",
         attempted: true,
         successful: comps.length > 0,
         attempts: 1,

@@ -14,7 +14,11 @@ export type SellerProfile = {
 
 export const PLATFORMS = [
   "Facebook Marketplace",
+  "Kijiji",
+  "OfferUp",
   "Craigslist",
+  "Mercari",
+  "Poshmark",
   "eBay",
 ] as const;
 
@@ -48,6 +52,8 @@ export type ItemAttributes = {
   color: string | null;
   notable_features: string[];
   visible_text: string[];
+  /** Google/Shopping-ready phrase from vision — preferred over hand-built queries. */
+  search_query?: string | null;
   confidence: "high" | "medium" | "low";
 };
 
@@ -165,6 +171,8 @@ export type AgentEvent = {
 
 export type Listing = {
   id: string;
+  /** Owning seller (Supabase auth user id). */
+  user_id: string;
   photos: string[];
   title: string;
   description: string;

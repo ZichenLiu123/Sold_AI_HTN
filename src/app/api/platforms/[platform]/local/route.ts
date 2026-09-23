@@ -3,6 +3,7 @@ import { beginLocalConnection } from "@/lib/marketplace/connections";
 import { isMarketplacePlatform } from "@/lib/marketplace/adapters";
 import { platformFromSlug } from "@/lib/platforms";
 import { isEphemeralFs } from "@/lib/storage";
+import { apiError, withSeller } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,14 +28,10 @@ export async function POST(
     );
   }
   try {
-    return NextResponse.json(await beginLocalConnection(platform));
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Could not open Chrome on this Mac.",
-      },
-      { status: 502 }
+    return await withSeller(async () =>
+      NextResponse.json(await beginLocalConnection(platform))
     );
+  } catch (error) {
+    return apiError(error, "Could not open Chrome on this Mac.");
   }
 }

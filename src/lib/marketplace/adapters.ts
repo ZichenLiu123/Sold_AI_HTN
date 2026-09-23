@@ -329,23 +329,32 @@ async function fillCraigslistListing(page: Page, listing: Listing): Promise<Fill
     return { readyToPublish: false, detail: "Security verification requires your attention." };
   }
   await uploadPhotos(page, listing).catch(() => false);
+  const { scriptedSeedFields, scriptedCoreReady } = await import("./scripted-fill");
+  const seeded = await scriptedSeedFields(page, listing, "Craigslist", fillByName);
+  if (scriptedCoreReady(seeded, listing)) {
+    const captured = await findCraigslistListingUrl(page, listing.title).catch(() => null);
+    if (captured) {
+      return { readyToPublish: true, detail: `Live listing opened at ${captured.url}` };
+    }
+  }
   try {
+    // Operator only for wizard steps / captcha / publish — core fields already seeded.
     const operated = await operateListingForm(page, listing, "Craigslist");
     if (operated.published) return { readyToPublish: true, detail: operated.detail };
     const captured = await findCraigslistListingUrl(page, listing.title).catch(() => null);
     if (captured) {
       return { readyToPublish: true, detail: `Live listing opened at ${captured.url}` };
     }
-    await fillByName(page, ["Posting title", "Title"], listing.title);
-    await fillByName(page, ["Price"], String(listing.price));
-    await fillByName(page, ["Posting body", "Description"], listing.description);
     if (operated.detail.includes("complete") || operated.detail.includes("Ready")) {
       return { readyToPublish: true, detail: operated.detail };
     }
   } catch {
     /* fall through to the generic wizard */
   }
-  return { readyToPublish: true, detail: "Required fields are filled." };
+  return {
+    readyToPublish: scriptedCoreReady(seeded, listing),
+    detail: seeded.detail,
+  };
 }
 
 async function fillEbayListing(page: Page, listing: Listing): Promise<FillResult> {
@@ -389,29 +398,28 @@ async function fillEbayListing(page: Page, listing: Listing): Promise<FillResult
       : `eBay photo attach did not stick yet (${fileInputs} file inputs). The form operator will retry.`
   );
   const brand = listing.attributes?.brand || "TestBrand";
-  const brandOk = await fillEbayBrand(page, brand);
+  let brandOk = await fillEbayBrand(page, brand);
   await logAgent(
     listing.id,
     "browser",
     "FORM",
     brandOk ? `Brand set to ${brand} from the Search or enter your own box.` : `Brand is still empty after searching for ${brand}.`
   );
+  const { scriptedSeedFields, scriptedCoreReady } = await import("./scripted-fill");
+  const seeded = await scriptedSeedFields(page, listing, "eBay", fillByName);
   try {
     const operated = await operateListingForm(page, listing, "eBay");
     if (operated.published) return { readyToPublish: true, detail: operated.detail };
-    await fillByName(page, ["Title", "Item title"], listing.title);
-    await fillByName(page, ["Price"], String(listing.price));
-    await fillByName(page, ["Description"], listing.description);
     const { photosAlreadyOnForm } = await import("./photos");
     const { ebayBrandIsSet } = await import("./ebay-fields");
     const photosOk = uploaded || (await photosAlreadyOnForm(page));
-    const brandOk = await ebayBrandIsSet(page, listing.attributes?.brand || "TestBrand");
-    if (photosOk && brandOk) {
-      return { readyToPublish: true, detail: operated.detail };
+    brandOk = brandOk || (await ebayBrandIsSet(page, brand));
+    if (photosOk && brandOk && scriptedCoreReady(seeded, listing)) {
+      return { readyToPublish: true, detail: operated.detail || seeded.detail };
     }
     return {
       readyToPublish: false,
-      detail: `eBay still needs ${[!photosOk && "photos", !brandOk && "brand"].filter(Boolean).join(", ") || "required fields"} before it can go live.`,
+      detail: `eBay still needs ${[!photosOk && "photos", !brandOk && "brand", !seeded.title && "title", !seeded.price && "price"].filter(Boolean).join(", ") || "required fields"} before it can go live.`,
     };
   } catch {
     /* fall through */
@@ -440,9 +448,12 @@ async function fillFacebookListing(page: Page, listing: Listing): Promise<FillRe
     .first()
     .waitFor({ state: "visible", timeout: 15_000 })
     .catch(() => undefined);
-  const title = await fillByName(page, ["Title"], listing.title);
-  const price = await fillByName(page, ["Price"], String(listing.price));
-  await fillByName(page, ["Description"], listing.description);
+  const { scriptedSeedFields, scriptedCoreReady } = await import("./scripted-fill");
+  const seeded = await scriptedSeedFields(page, listing, "Facebook Marketplace", fillByName);
+  await pickFacebookDetails(page, listing).catch(() => undefined);
+  if (scriptedCoreReady(seeded, listing) && uploaded) {
+    await clickByText(page, [/^next$/i]).catch(() => undefined);
+  }
   try {
     const operated = await operateListingForm(page, listing, "Facebook Marketplace");
     if (operated.published) return { readyToPublish: true, detail: operated.detail };
@@ -454,17 +465,16 @@ async function fillFacebookListing(page: Page, listing: Listing): Promise<FillRe
       };
     }
   } catch {
-    await pickFacebookDetails(page, listing).catch(() => undefined);
     await clickByText(page, [/^next$/i]);
   }
-  if (!uploaded || !title || !price) {
+  if (!uploaded || !seeded.title || !seeded.price) {
     return {
       readyToPublish: false,
       detail:
         "Facebook got the photos, but Sold could not type title or price. Leave the Chrome window open, fill those two fields, then publish again.",
     };
   }
-  return { readyToPublish: true, detail: "Required fields are filled." };
+  return { readyToPublish: true, detail: seeded.detail };
 }
 
 async function advanceUntilReady(
@@ -609,9 +619,6 @@ function adapter(config: {
         'input[placeholder="Price"]',
         'input[inputmode="decimal"]',
       ], String(listing.price));
-      if (config.platform === "Facebook Marketplace") {
-        await pickFacebookDetails(page, listing);
-      }
       if (!uploaded || !title || !price) {
         return {
           readyToPublish: false,
@@ -637,7 +644,11 @@ function adapter(config: {
       if (
         config.platform === "Facebook Marketplace" ||
         config.platform === "Craigslist" ||
-        config.platform === "eBay"
+        config.platform === "eBay" ||
+        config.platform === "Kijiji" ||
+        config.platform === "OfferUp" ||
+        config.platform === "Mercari" ||
+        config.platform === "Poshmark"
       ) {
         return;
       }
@@ -714,6 +725,129 @@ const ADAPTERS: Record<Platform, MarketplaceAdapter> = {
     price: ['input[name*="price" i]', 'input[aria-label*="price" i]'],
     publishNames: [/list it/i, /^publish$/i],
     successUrl: /ebay\.com\/itm\/\d+/i,
+  }),
+  Kijiji: adapter({
+    platform: "Kijiji",
+    domains: ["kijiji.ca"],
+    loginUrl: "https://www.kijiji.ca/t-login.html",
+    createUrl: "https://www.kijiji.ca/p-select-category.html",
+    loggedInSelectors: [
+      'a[href*="logout"]',
+      'a[href*="t-logout"]',
+      'a[href*="/m-my-ads"]',
+      'a[href*="my-kijiji"]',
+      '[data-testid*="account"]',
+    ],
+    loggedOutUrl: /t-login|login\.html|sign.?in/i,
+    title: [
+      'input[name*="title" i]',
+      'input[id*="title" i]',
+      'input[aria-label*="title" i]',
+    ],
+    description: [
+      'textarea[name*="description" i]',
+      'textarea[id*="description" i]',
+      'textarea[aria-label*="description" i]',
+    ],
+    price: [
+      'input[name*="price" i]',
+      'input[id*="price" i]',
+      'input[aria-label*="price" i]',
+    ],
+    publishNames: [/^post$/i, /^publish$/i, /post ad/i, /^next$/i, /^continue$/i],
+    prefillNames: [/^next$/i, /^continue$/i, /for sale/i],
+    successUrl: /kijiji\.ca\/.+\/\d{6,}/i,
+  }),
+  OfferUp: adapter({
+    platform: "OfferUp",
+    domains: ["offerup.com"],
+    loginUrl: "https://offerup.com/login/",
+    createUrl: "https://offerup.com/post/",
+    loggedInSelectors: [
+      'a[href*="/account"]',
+      'a[href*="/logout"]',
+      'a[href*="/settings"]',
+      '[data-testid*="avatar"]',
+      'button[aria-label*="account" i]',
+    ],
+    loggedOutUrl: /\/login|\/signup|signin/i,
+    title: [
+      'input[name*="title" i]',
+      'input[aria-label*="title" i]',
+      'input[placeholder*="title" i]',
+    ],
+    description: [
+      'textarea[name*="description" i]',
+      'textarea[aria-label*="description" i]',
+      'textarea[placeholder*="description" i]',
+    ],
+    price: [
+      'input[name*="price" i]',
+      'input[aria-label*="price" i]',
+      'input[placeholder*="price" i]',
+    ],
+    publishNames: [/^post$/i, /^list$/i, /^publish$/i, /^next$/i, /^continue$/i],
+    successUrl: /offerup\.com\/item\//i,
+  }),
+  Mercari: adapter({
+    platform: "Mercari",
+    domains: ["mercari.com"],
+    loginUrl: "https://www.mercari.com/login/",
+    createUrl: "https://www.mercari.com/sell/",
+    loggedInSelectors: [
+      'a[href*="/mypage"]',
+      'a[href*="/logout"]',
+      'a[href*="/settings"]',
+      '[data-testid*="user"]',
+      'button[aria-label*="account" i]',
+    ],
+    loggedOutUrl: /\/login|\/signup|signin/i,
+    title: [
+      'input[name*="name" i]',
+      'input[name*="title" i]',
+      'input[aria-label*="name" i]',
+      'input[aria-label*="title" i]',
+    ],
+    description: [
+      'textarea[name*="description" i]',
+      'textarea[aria-label*="description" i]',
+    ],
+    price: [
+      'input[name*="price" i]',
+      'input[aria-label*="price" i]',
+    ],
+    publishNames: [/^list$/i, /^publish$/i, /list for sale/i, /^next$/i, /^continue$/i],
+    successUrl: /mercari\.com\/(?:us\/)?item\//i,
+  }),
+  Poshmark: adapter({
+    platform: "Poshmark",
+    domains: ["poshmark.com"],
+    loginUrl: "https://poshmark.com/login",
+    createUrl: "https://poshmark.com/create-listing",
+    loggedInSelectors: [
+      'a[href*="/logout"]',
+      'a[href*="/closet/"]',
+      'a[href*="/feed"]',
+      '[data-test*="header-user"]',
+      'a[aria-label*="closet" i]',
+    ],
+    loggedOutUrl: /\/login|\/signup|signin/i,
+    title: [
+      'input[name*="title" i]',
+      'input[aria-label*="title" i]',
+      'textarea[name*="title" i]',
+    ],
+    description: [
+      'textarea[name*="description" i]',
+      'textarea[aria-label*="description" i]',
+    ],
+    price: [
+      'input[name*="price" i]',
+      'input[aria-label*="price" i]',
+      'input[name*="listing_price" i]',
+    ],
+    publishNames: [/^list$/i, /^publish$/i, /list now/i, /^next$/i, /^continue$/i],
+    successUrl: /poshmark\.com\/listing\//i,
   }),
 };
 

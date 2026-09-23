@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { disconnectConnection } from "@/lib/marketplace/connections";
 import { isMarketplacePlatform } from "@/lib/marketplace/adapters";
 import { platformFromSlug } from "@/lib/platforms";
+import { apiError, withSeller } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,11 +17,10 @@ export async function POST(
     return NextResponse.json({ error: "Unsupported platform." }, { status: 400 });
   }
   try {
-    return NextResponse.json(await disconnectConnection(platform));
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not disconnect." },
-      { status: 502 }
+    return await withSeller(async () =>
+      NextResponse.json(await disconnectConnection(platform))
     );
+  } catch (error) {
+    return apiError(error, "Could not disconnect.");
   }
 }

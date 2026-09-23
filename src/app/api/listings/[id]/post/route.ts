@@ -9,7 +9,9 @@ import {
   summarizePostingResults,
   unpublishedMarketplacePlatforms,
 } from "@/lib/marketplace/policy";
-import { DEMO_USER, type Listing, type Platform, type PlatformConnectionStatus } from "@/lib/types";
+import type { Listing, Platform, PlatformConnectionStatus } from "@/lib/types";
+import { runAsUserAsync, sellerId } from "@/lib/seller-context";
+import { withOwnedListing } from "@/lib/api";
 import { isAgentCancelled, markAgentIdle, markAgentRunning } from "@/lib/agents/cancel";
 
 export const runtime = "nodejs";
@@ -89,10 +91,8 @@ async function finishPosting(id: string) {
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const listing = await getListing(id);
-  if (!listing) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  return withOwnedListing(id, async (user, listing) => {
+  // listing already owned
 
   const body = (await req.json().catch(() => ({}))) as {
     price?: number;
@@ -123,7 +123,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     Object.fromEntries(
       await Promise.all(
         listing.platforms.map(async (platform) => {
-          const connection = await getPlatformConnection(DEMO_USER.id, platform);
+          const connection = await getPlatformConnection(sellerId(), platform);
           return [platform, connection?.status] as const;
         })
       )
@@ -173,7 +173,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     );
     inflight.set(
       id,
-      finishPosting(id)
+      runAsUserAsync(user.id, () => finishPosting(id))
         .catch(() => undefined)
         .finally(() => inflight.delete(id))
     );
@@ -181,4 +181,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const started = (await getListing(id)) as Listing;
   return NextResponse.json(started, { status: 202 });
+  });
 }

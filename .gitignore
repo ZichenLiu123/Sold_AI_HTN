@@ -23,6 +23,7 @@
 /data/chrome-profiles/
 /data/browserbase-minutes-spent
 /data/inbox-watch.json
+/data/price-cache.json
 /public/uploads/*
 !/public/uploads/.gitkeep
 
@@ -32,3 +33,4 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 .netlify
+.nexus-ref/

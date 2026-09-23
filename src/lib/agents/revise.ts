@@ -4,7 +4,7 @@ import { complete } from "../llm";
 import { extractJson } from "../util";
 import { getListing, getPlatformConnection, getSellerProfile, logAgent, updateListing } from "../db";
 import { sellerPickupLine } from "../profile";
-import { DEMO_USER } from "../types";
+import { sellerId } from "../seller-context";
 import { getMarketplaceAdapter } from "../marketplace/adapters";
 import { isLocalConnection, localPage, withLocalChrome } from "../marketplace/local-browser";
 import { operateListingForm } from "./operator";
@@ -224,7 +224,7 @@ async function reviseOnPlatform(
   remoteUrl: string | undefined,
   edits: ListingRevise
 ) {
-  const connection = await getPlatformConnection(DEMO_USER.id, platform);
+  const connection = await getPlatformConnection(sellerId(), platform);
   if (!connection || connection.status !== "connected") {
     throw new Error(`${platform} is not connected.`);
   }
@@ -365,6 +365,10 @@ function reviseStartUrl(platform: Platform) {
   if (platform === "Facebook Marketplace") {
     return "https://www.facebook.com/marketplace/you/selling";
   }
+  if (platform === "Kijiji") return "https://www.kijiji.ca/m-my-ads.html";
+  if (platform === "OfferUp") return "https://offerup.com/seller/listings/";
+  if (platform === "Mercari") return "https://www.mercari.com/mypage/listings/";
+  if (platform === "Poshmark") return "https://poshmark.com/closet";
   if (platform === "eBay") return "https://www.ebay.com/mys/active";
   return "https://accounts.craigslist.org/login/home";
 }

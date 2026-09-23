@@ -5,6 +5,10 @@ import { lookupOpenAIMarketPrice } from "./openai-price";
 import { evaluateComps } from "./evaluator";
 import { generateListingCopy } from "./lister";
 import { negotiate } from "./negotiator";
+import {
+  chatgptMarketAvailable,
+  identifyAndPriceFromPhotos,
+} from "./chatgpt-market";
 import { getListing, listMessages, logAgent, updateListing } from "../db";
 import type {
   CompData,
@@ -30,11 +34,28 @@ const ListerState = Annotation.Root({
     reducer: (_left, right) => right,
     default: () => null,
   }),
+  chatgptPrice: Annotation<number | null>({
+    reducer: (_left, right) => right,
+    default: () => null,
+  }),
+  chatgptReasoning: Annotation<string | null>({
+    reducer: (_left, right) => right,
+    default: () => null,
+  }),
   generated: Annotation<GeneratedListing | null>({
     reducer: (_left, right) => right,
     default: () => null,
   }),
 });
+
+function compsAreStrong(comps: CompData | null | undefined) {
+  return Boolean(
+    comps &&
+      !comps.mocked &&
+      comps.median != null &&
+      comps.comps.length >= 3
+  );
+}
 
 async function visionNode(state: typeof ListerState.State) {
   throwIfCancelled(state.listingId);
@@ -42,6 +63,72 @@ async function visionNode(state: typeof ListerState.State) {
     pipeline_stage: "Reading the photos",
     status: "analyzing",
   });
+
+  // Primary path: vision + live web search in one tool-using call.
+  // Browser scraping is only a comps fallback later.
+  if (chatgptMarketAvailable()) {
+    await logAgent(
+      state.listingId,
+      "lister",
+      "VISION",
+      "Sold Agent is identifying the item from photos and looking up live prices."
+    );
+    await updateListing(state.listingId, {
+      pipeline_stage: "Sold Agent is identifying the item and searching prices…",
+    });
+    try {
+      const market = await identifyAndPriceFromPhotos(state.photos, state.hints);
+      throwIfCancelled(state.listingId);
+      const previous = await getListing(state.listingId);
+      if (!market.attributes.brand && previous?.attributes?.brand) {
+        market.attributes.brand = previous.attributes.brand;
+      }
+      const brand = market.attributes.brand || "no brand visible";
+      const model = market.attributes.model || "no model on the item";
+      await logAgent(
+        state.listingId,
+        "lister",
+        "VISION",
+        `Sold Agent saw ${market.attributes.category} · ${brand} · ${model} · ${market.attributes.condition}${
+          market.attributes.search_query
+            ? ` · search “${market.attributes.search_query}”`
+            : ""
+        }.`
+      );
+      await logAgent(
+        state.listingId,
+        "browser",
+        "COMPS",
+        market.comps.median != null
+          ? `Web comps: ${market.comps.comps.length} listings, median $${market.comps.median}. ${market.price_reasoning || ""}`.trim()
+          : `Sold Agent identified the item but comps were thin (${market.comps.comps.length}). May scrape Google next.`
+      );
+      await updateListing(state.listingId, {
+        attributes: market.attributes,
+        comps: market.comps,
+        pipeline_stage: compsAreStrong(market.comps)
+          ? "Sold Agent priced the item"
+          : "Photos read — need more comps",
+        ...(market.price_reasoning
+          ? { price_reasoning: market.price_reasoning }
+          : {}),
+      });
+      return {
+        attributes: market.attributes,
+        comps: market.comps,
+        chatgptPrice: market.suggested_price || null,
+        chatgptReasoning: market.price_reasoning || null,
+      };
+    } catch (error) {
+      await logAgent(
+        state.listingId,
+        "lister",
+        "VISION",
+        `Sold Agent market lookup failed (${error instanceof Error ? error.message : "error"}). Falling back to photo-only vision.`
+      );
+    }
+  }
+
   await logAgent(
     state.listingId,
     "lister",
@@ -65,6 +152,8 @@ async function visionNode(state: typeof ListerState.State) {
     "VISION",
     `Saw ${attributes.category} · ${brand} · ${model} · ${attributes.condition}${
       attributes.flaws.length ? ` · flaws: ${attributes.flaws.join(", ")}` : " · no visible flaws"
+    }${
+      attributes.search_query ? ` · Google: “${attributes.search_query}”` : ""
     }.`
   );
   await updateListing(state.listingId, { attributes, pipeline_stage: "Photos read" });
@@ -73,6 +162,23 @@ async function visionNode(state: typeof ListerState.State) {
 
 async function compsNode(state: typeof ListerState.State) {
   throwIfCancelled(state.listingId);
+  if (compsAreStrong(state.comps)) {
+    const comps = state.comps!;
+    const { writePriceCache } = await import("../marketplace/price-cache");
+    if (comps.query) writePriceCache(comps.query, comps);
+    await updateListing(state.listingId, {
+      comps,
+      pipeline_stage: "Comps in",
+    });
+    await logAgent(
+      state.listingId,
+      "browser",
+      "COMPS",
+      `Using Sold Agent web comps for “${comps.query}”: median $${comps.median}. Skipped a browser scrape.`
+    );
+    return { comps };
+  }
+
   await updateListing(state.listingId, {
     pipeline_stage: "Checking comps across marketplaces",
   });
@@ -88,32 +194,40 @@ async function compsNode(state: typeof ListerState.State) {
     confidence: "low",
   };
   const identity = [attributes.brand, attributes.model].filter(Boolean).join(" ");
-  await logAgent(
-    state.listingId,
-    "browser",
-    "COMPS",
-    identity
-      ? `Searching eBay, Craigslist, Facebook, Mercari, OfferUp, Poshmark, and Google Shopping for “${identity}”.`
-      : "No printed model. Searching Browserbase with the visual description."
-  );
-  if (identity) {
+  const googleQuery =
+    attributes.search_query ||
+    identity ||
+    [attributes.color, attributes.category].filter(Boolean).join(" ");
+  const { readPriceCache, writePriceCache } = await import("../marketplace/price-cache");
+  const cached = googleQuery ? readPriceCache(googleQuery) : null;
+  if (cached) {
+    await updateListing(state.listingId, { comps: cached, pipeline_stage: "Comps in (cached)" });
     await logAgent(
       state.listingId,
       "browser",
       "COMPS",
-      "Also asking OpenAI for a market price in parallel."
+      `Reused cached comps for “${googleQuery}”: median $${cached.median}.`
     );
+    return { comps: cached };
   }
-  const livePromise = searchComps(attributes, {
+  await logAgent(
+    state.listingId,
+    "browser",
+    "COMPS",
+    googleQuery
+      ? `Web comps were thin — scraping Google Shopping + eBay sold for “${googleQuery}”.`
+      : "No search query yet. Falling back to a visual description across marketplaces."
+  );
+  const live = await searchComps(attributes, {
     onSession: async () => {
       await updateListing(state.listingId, {
-        pipeline_stage: "Browserbase is open. Searching marketplaces…",
+        pipeline_stage: "Google Shopping is open. Pricing the item…",
       });
       await logAgent(
         state.listingId,
         "browser",
         "COMPS",
-        "Browserbase session opened. Checking each marketplace now."
+        `Browserbase session opened. Searching Google for “${googleQuery}”.`
       );
     },
     onSource: async (name, found, reason) => {
@@ -131,36 +245,46 @@ async function compsNode(state: typeof ListerState.State) {
       );
     },
   });
-  const webPromise = identity
-    ? lookupOpenAIMarketPrice(attributes).catch(() => null)
-    : Promise.resolve(null);
-  const live = await livePromise;
-  const web = hasSoldPriceLock(live) ? null : await webPromise;
+  const prior = state.comps;
   const tokens = relevanceTokens(attributes);
+  const withChat =
+    prior && prior.comps.length
+      ? mergeCompData(live, prior, tokens.any, tokens.all)
+      : live;
+  const web =
+    (identity || attributes.search_query) && !hasSoldPriceLock(withChat)
+      ? await lookupOpenAIMarketPrice(attributes).catch(() => null)
+      : null;
   const merged = web
-    ? mergeCompData(live, web, tokens.any, tokens.all)
-    : live;
+    ? mergeCompData(withChat, web, tokens.any, tokens.all)
+    : withChat;
   await updateListing(state.listingId, {
     pipeline_stage: "Checking if those prices are actually comparable",
   });
+  const soldLocked = hasSoldPriceLock(merged);
   await logAgent(
     state.listingId,
-    "evaluator",
-    "EVAL",
-    "Checking whether each hit is the same product and converting packs to a per-item price."
+    "lister",
+    "PRICE",
+    soldLocked
+      ? "Sold comps already lock the price. Applying pack/variant checks without another pass."
+      : "Checking whether each hit is the same product and converting packs to a per-item price."
   );
-  const comps = await evaluateComps(attributes, merged);
+  const comps = await evaluateComps(attributes, merged, { llm: !soldLocked });
   const kept = comps.comps.length;
   const packs = comps.comps.filter((comp) => (comp.quantity || 1) > 1).length;
   await updateListing(state.listingId, { comps, pipeline_stage: "Comps in" });
+  if (googleQuery && comps.median != null && !comps.mocked) {
+    writePriceCache(googleQuery, comps);
+  }
   const range =
     comps.median != null
       ? `${comps.min}–${comps.max} (median ${comps.median})`
       : "no usable unit price";
   await logAgent(
     state.listingId,
-    "evaluator",
-    "EVAL",
+    "lister",
+    "PRICE",
     comps.median != null
       ? `Kept ${kept} comps${packs ? `, including ${packs} packs divided to per-item` : ""}. Unit median $${comps.median}.`
       : comps.failure_reason || "Not enough comps after quantity checks."
@@ -194,15 +318,29 @@ async function copyNode(state: typeof ListerState.State) {
     state.comps
   );
   throwIfCancelled(state.listingId);
-  const price = generated.suggested_price;
-  const floor = roundClean(price * 0.8);
+  // Prefer Sold Agent's suggested ask when comps support it; never invent if both empty.
+  const fromChat =
+    state.chatgptPrice && state.chatgptPrice > 0 ? state.chatgptPrice : null;
+  const fromComps =
+    state.comps?.median != null && state.comps.median > 0
+      ? roundClean(state.comps.median)
+      : null;
+  const price =
+    generated.suggested_price > 0
+      ? generated.suggested_price
+      : fromChat || fromComps || 0;
+  const floor = price > 0 ? roundClean(price * 0.8) : 0;
+  const reasoning =
+    state.chatgptReasoning ||
+    generated.price_reasoning ||
+    (fromComps ? `Priced from verified comps (median $${fromComps}).` : "");
   await updateListing(state.listingId, {
     title: generated.title,
     description: generated.description,
     price,
     floor_price: floor,
     platforms: generated.suggested_platforms,
-    price_reasoning: generated.price_reasoning,
+    price_reasoning: reasoning,
     status: "ready",
     pipeline_stage: "Needs your review",
     pipeline_error: null,
@@ -212,8 +350,8 @@ async function copyNode(state: typeof ListerState.State) {
     "lister",
     "COPY",
     price > 0
-      ? `Suggested $${price} (floor $${floor}, hidden). ${generated.price_reasoning} Platforms: ${generated.suggested_platforms.join(", ")}.`
-      : `Drafted without a price. ${generated.price_reasoning} Platforms: ${generated.suggested_platforms.join(", ")}.`
+      ? `Suggested $${price} (floor $${floor}, hidden). ${reasoning} Platforms: ${generated.suggested_platforms.join(", ")}.`
+      : `Drafted without a price. ${reasoning} Platforms: ${generated.suggested_platforms.join(", ")}.`
   );
   return { generated };
 }
@@ -240,7 +378,7 @@ export async function runLister(listing: Listing): Promise<Listing> {
     listing.id,
     "lister",
     "START",
-    "Lister Agent started: identify the item from photos → price it on marketplaces → write the listing."
+    "Lister Agent started: identify the item from photos → look up live prices → write the listing."
   );
   try {
     await listerGraph.invoke({

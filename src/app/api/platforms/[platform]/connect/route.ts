@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { beginConnection } from "@/lib/marketplace/connections";
 import { isMarketplacePlatform } from "@/lib/marketplace/adapters";
 import { platformFromSlug } from "@/lib/platforms";
+import { apiError, withSeller } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,11 +18,10 @@ export async function POST(
     return NextResponse.json({ error: "Unsupported platform." }, { status: 400 });
   }
   try {
-    return NextResponse.json(await beginConnection(platform));
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Connection failed." },
-      { status: 502 }
+    return await withSeller(async () =>
+      NextResponse.json(await beginConnection(platform))
     );
+  } catch (error) {
+    return apiError(error, "Connection failed.");
   }
 }

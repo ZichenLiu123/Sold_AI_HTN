@@ -3,8 +3,11 @@ import { complete, type LlmImage } from "../llm";
 import type { ItemAttributes, UserHints } from "../types";
 import { extractJson } from "../util";
 import { readPhotoBytes } from "../storage";
+import { normalizeGoogleQuery } from "./search-query";
 
-const VISION_PROMPT = `Look at these product photos and fill the listing fields. These values populate the form. Pricing is handled later — do not guess a price.
+export { normalizeGoogleQuery } from "./search-query";
+
+const VISION_PROMPT = `You identify a resale item from photos so we can price it on Google.
 
 Return JSON only:
 {
@@ -15,20 +18,30 @@ Return JSON only:
   "color": null,
   "flaws": [],
   "notable_features": [],
+  "visible_text": [],
+  "search_query": "",
   "confidence": "high" | "medium" | "low"
 }
 
-- category: what it is (juice, laptop, water bottle, gift box)
-- brand: the maker if printed or clearly the logo. Use normal product capitalization (Owala, Apple, OASIS).
-- model: the product line a shopper would search. Examples: MacBook Air, FreeSip, Apple 300 mL. Not a slogan ("100% Juice") and not a generic shape ("silver laptop").
-- If this is an Apple notebook, model must be MacBook, MacBook Air, or MacBook Pro. A display notch means Air or Pro, not a 2010s MacBook.
-- If this is an Owala bottle with the push-button spout lid, model is FreeSip when that line is recognizable.
-- Include size/flavor in model when printed (300 mL, 24oz, apple).
-- condition: from visible wear, not a guarantee
-- flaws: visible damage, stains, scratches, missing parts — do not minimize them
-- notable_features: physical traits that are not already brand/model (notch display, corporate logo)
-- Never invent a spec you cannot see. Do not guess RAM, year, or storage.
-- Ignore nutrition facts, ingredients, bilingual health stamps, barcodes, and recycling marks`;
+Field rules:
+- category: short noun a shopper uses (juice, laptop, water bottle, gift box). Not marketing copy.
+- brand: maker if printed or an unmistakable logo. Normal product casing (Owala, Apple, OASIS). null if unsure.
+- model: the product line a shopper would type. Examples: MacBook Air, FreeSip, Apple 300 mL. Not slogans ("100% Juice") or vague shapes ("silver laptop").
+- Apple notebooks: model must be MacBook, MacBook Air, or MacBook Pro. A display notch means Air or Pro, not a 2010s MacBook.
+- Owala with the push-button spout lid: model is FreeSip when recognizable. Include size when printed (32oz, 24oz).
+- Include size/flavor in model when clearly printed (300 mL, apple).
+- condition: from visible wear only.
+- flaws: visible damage only — do not minimize.
+- notable_features: physical traits not already in brand/model (notch display, corporate logo). Max 3.
+- visible_text: short OCR snippets that identify the product (brand, model, size). Skip nutrition facts, ingredients, barcodes, recycling marks.
+- search_query: ONE Google Shopping query a careful shopper would type. Prefer: Brand + Model + Size + product type. Examples:
+  - "Owala FreeSip 32oz water bottle"
+  - "OASIS apple juice 300ml"
+  - "Apple MacBook Air 13 inch"
+  Do NOT include: condition words, "for sale", "used", "cheap", city, pickup, price, or fluff adjectives.
+  If brand/model are unclear, use the best concrete description (color + category + 1 feature). Max 8 words.
+- Never invent RAM, year, storage, or other specs you cannot see.
+- confidence: high only when brand or model is readable on the item.`;
 
 function mimeFor(filePath: string): LlmImage["media_type"] {
   const ext = path.extname(filePath).toLowerCase();
@@ -80,23 +93,33 @@ export async function extractAttributes(
     ),
     text: hintText
       ? `Seller hints (use to fill gaps, do not override what the photo clearly shows):\n${hintText}`
-      : "Identify the item in the photos and fill the fields.",
+      : "Identify the item and write the Google search_query a shopper would use.",
   });
 
-  const parsed = extractJson<ItemAttributes>(raw);
+  const parsed = extractJson<ItemAttributes & { search_query?: string }>(raw);
   const brand = parsed.brand || hints.brand || null;
   const model = parsed.model || null;
+  const category = parsed.category || hints.category || "uncategorized";
+  const visible_text = identifyingLines(brand, model, parsed.visible_text);
+  const search_query = normalizeGoogleQuery(parsed.search_query, [
+    brand,
+    model,
+    category !== "uncategorized" ? category : null,
+    parsed.color,
+  ]);
+
   return {
-    category: parsed.category || hints.category || "uncategorized",
+    category,
     brand,
     model,
     condition: parsed.condition || hints.condition || "good",
     flaws: Array.isArray(parsed.flaws) ? parsed.flaws : [],
     color: parsed.color || null,
     notable_features: Array.isArray(parsed.notable_features)
-      ? parsed.notable_features
+      ? parsed.notable_features.slice(0, 3)
       : [],
-    visible_text: identifyingLines(brand, model, parsed.visible_text),
+    visible_text,
+    search_query,
     confidence: parsed.confidence || (brand || model ? "high" : "medium"),
   };
 }

@@ -24,6 +24,7 @@ import {
 } from "@/lib/conversations";
 import { openListingLink } from "@/lib/platforms";
 import { PhotoTray } from "./PhotoTray";
+import { RubberStamp } from "./RubberStamp";
 
 type ListingEdits = {
   title: string;
@@ -136,7 +137,7 @@ export function ListingDesk({
       if (facebookListingReview(current)) return current;
       if (current.pipeline_error) return current;
       if (/^stopped/i.test(current.pipeline_stage || "")) return current;
-      await new Promise((resolve) => window.setTimeout(resolve, 800));
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
     }
     return refresh();
   }
@@ -159,7 +160,7 @@ export function ListingDesk({
         ) {
           return current;
         }
-        await new Promise((resolve) => window.setTimeout(resolve, 800));
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
       }
       throw new Error("Lister is still running. Refresh in a moment.");
     };
@@ -284,7 +285,7 @@ export function ListingDesk({
     if (!streaming) return;
     const timer = window.setInterval(() => {
       void refresh().catch(() => undefined);
-    }, 800);
+    }, 2000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listing?.id, listing?.status, busy]);
@@ -533,6 +534,25 @@ export function ListingDesk({
     setBusy("");
   }
 
+  async function stampAccept(messageId: string) {
+    setBusy("stamp");
+    setError("");
+    const res = await fetch(`/api/listings/${id}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stamp_message_id: messageId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Stamp failed");
+    } else {
+      setListing(data.listing);
+      setMessages(data.messages);
+      if (data.events) setEvents(data.events);
+    }
+    setBusy("");
+  }
+
   if (!listing && error) {
     return <p className="px-4 py-8 text-sold">{error}</p>;
   }
@@ -596,12 +616,12 @@ export function ListingDesk({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden" data-listing>
-      <div className="flex shrink-0 items-center gap-2 border-b border-line bg-paper/95 px-3 py-2 backdrop-blur">
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-paper px-3 py-2.5">
         {chatReady && threadId ? (
           <button
             type="button"
             onClick={closeThread}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-wash text-lg"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-wash text-base text-ink"
             aria-label="Back to chats"
           >
             ←
@@ -610,7 +630,7 @@ export function ListingDesk({
           <button
             type="button"
             onClick={closeChats}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-wash text-lg"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-wash text-base text-ink"
             aria-label="Back to listing"
           >
             ←
@@ -618,7 +638,7 @@ export function ListingDesk({
         ) : (
           <Link
             href="/listings"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-wash text-lg"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-wash text-base text-ink"
             aria-label="Back to listings"
           >
             ←
@@ -628,17 +648,17 @@ export function ListingDesk({
         <img
           src={listing.photos[0]}
           alt=""
-          className="h-9 w-9 shrink-0 rounded-lg object-cover"
+          className="h-8 w-8 shrink-0 rounded-lg object-cover"
         />
         <button
           type="button"
           onClick={() => setSheet("ticket")}
           className="min-w-0 flex-1 text-left"
         >
-          <p className="truncate font-serif text-base leading-tight">
+          <p className="truncate text-[14px] font-semibold leading-tight tracking-tight">
             {listing.title || "Looking at the photos…"}
           </p>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/45">
+          <p className="text-[11px] text-grey">
             {listing.price ? money(listing.price) : statusLabel(listing.status)}
             {active ? ` · ${active.buyer_name}` : showChats ? " · chats" : ""}
           </p>
@@ -648,24 +668,20 @@ export function ListingDesk({
             type="button"
             onClick={() => void stopAgent()}
             disabled={stopping}
-            className="shrink-0 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-sold"
+            className="shrink-0 px-2 py-1 text-[12px] font-medium text-stamp"
           >
             {stopping || /stopping/i.test(listing.pipeline_stage || "") ? "Stopping…" : "Stop"}
           </button>
         )}
         <span
-          className={`stamp shrink-0 px-1.5 py-1 text-[8px] ${
-            stamp === "sold"
-              ? "text-sold"
-              : stamp === "gone"
-                ? "text-sold"
+          className={`stamp shrink-0 ${
+            stamp === "sold" || stamp === "gone" || stamp === "failed"
+              ? "badge-live"
               : stamp === "live"
-                ? "text-sage"
+                ? "badge-live"
                 : stamp === "review"
-                  ? "text-ink/70"
-                : stamp === "failed"
-                  ? "text-sold"
-                  : "text-ink/70"
+                  ? "badge-submitted"
+                  : "badge-draft"
           }`}
         >
           {stamp === "failed"
@@ -693,6 +709,8 @@ export function ListingDesk({
           busy={busy}
           error={error}
           send={send}
+          stampAccept={stampAccept}
+          listingSold={listing.status === "sold"}
           chatEnd={chatEnd}
           onActivity={() => setSheet("activity")}
           watchingFacebook={watchOn && facebookLive && !facebookGone}
@@ -756,6 +774,7 @@ export function ListingDesk({
           busy={busy}
           error={error}
           connectionStatus={connectionStatus}
+          connectionsLoaded={connectionsLoaded}
           approve={approve}
           saveDraft={saveDraft}
           reject={rejectListing}
@@ -793,6 +812,7 @@ function ReviewView({
   busy,
   error,
   connectionStatus,
+  connectionsLoaded,
   approve,
   saveDraft,
   reject,
@@ -809,6 +829,7 @@ function ReviewView({
   busy: string;
   error: string;
   connectionStatus: Partial<Record<Platform, PlatformConnectionStatus>>;
+  connectionsLoaded: boolean;
   approve: (edits: ListingEdits) => void;
   saveDraft: (edits: ListingEdits) => Promise<boolean>;
   reject: () => void;
@@ -859,26 +880,17 @@ function ReviewView({
     listing.platforms,
   ]);
 
-  const sources = listing.comps?.sources?.length
-    ? listing.comps.sources
-    : listing.comps?.source
-      ? [listing.comps.source]
-      : [];
   const verifiedComps = Boolean(
     listing.comps &&
       !listing.comps.mocked &&
       listing.comps.comps.length >= 3 &&
       listing.comps.median
   );
-  const diagnostics = listing.comps?.diagnostics || [];
-  const attemptedSources =
-    listing.comps?.attempted_sources || diagnostics.map((item) => item.source);
-  const successfulSources =
-    listing.comps?.successful_sources || (verifiedComps ? sources : []);
   const price = Number(priceText);
   const floor = Number(floorText);
   const missingAccounts = missingConnectedPlatforms(platforms, connectionStatus);
   const canApprove =
+    connectionsLoaded &&
     Number.isFinite(price) &&
     price > 0 &&
     platforms.length > 0 &&
@@ -896,80 +908,95 @@ function ReviewView({
         </div>
         <div className="px-4 py-4">
           <Pipeline listing={listing} busy={busy === "lister"} />
+          <StatusManifest listing={listing} />
 
           {editable ? (
-            <div className="mt-5 grid gap-3">
-              <label className="grid gap-1 text-sm">
+            <div className="mt-5 grid gap-4">
+              <div className="grid gap-4 border border-line bg-card p-4 sm:grid-cols-[7rem_1fr]">
+                {listing.photos[0] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={listing.photos[0]}
+                    alt=""
+                    className="aspect-square w-full object-cover"
+                  />
+                )}
+                <div className="grid gap-3">
+                  <p className="text-[13px] font-medium text-grey">
+                    Review item · fields from vision
+                  </p>
+                  <label className="grid gap-1 text-[13px] font-medium text-grey">
+                    Brand
+                    <input
+                      value={brand}
+                      onChange={(e) => setBrand(e.target.value)}
+                      className="h-11 border border-line bg-paper px-3 text-[15px] font-normal text-ink"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-[13px] font-medium text-grey">
+                    Model
+                    <input
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      className="h-11 border border-line bg-paper px-3 text-[15px] font-normal text-ink"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="grid gap-1 text-[13px] font-medium text-grey">
+                      Condition
+                      <select
+                        value={condition}
+                        onChange={(e) => setCondition(e.target.value)}
+                        className="h-11 border border-line bg-paper px-3 text-[15px] text-ink"
+                      >
+                        <option value="">From photo</option>
+                        <option>new</option>
+                        <option>like new</option>
+                        <option>good</option>
+                        <option>fair</option>
+                        <option>poor</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-[13px] font-medium text-grey">
+                      Category
+                      <input
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="h-11 border border-line bg-paper px-3 text-[15px] font-normal text-ink"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <label className="grid gap-1 text-[13px] font-medium text-grey">
                 Title
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="h-12 rounded-xl border border-line bg-paper px-3"
+                  className="h-11 border border-line bg-paper px-3 text-[15px] font-normal text-ink"
                 />
               </label>
-              <label className="grid gap-1 text-sm">
+              <label className="grid gap-1 text-[13px] font-medium text-grey">
                 Description
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={5}
-                  className="rounded-xl border border-line bg-paper px-3 py-2"
+                  className="border border-line bg-paper px-3 py-2 text-[15px] text-ink"
                 />
               </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="grid gap-1 text-sm">
-                  Brand
-                  <input
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                    className="h-12 rounded-xl border border-line bg-paper px-3"
-                  />
-                </label>
-                <label className="grid gap-1 text-sm">
-                  Category
-                  <input
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="h-12 rounded-xl border border-line bg-paper px-3"
-                  />
-                </label>
-                <label className="grid gap-1 text-sm">
-                  Condition
-                  <select
-                    value={condition}
-                    onChange={(e) => setCondition(e.target.value)}
-                    className="h-12 rounded-xl border border-line bg-paper px-3"
-                  >
-                    <option value="">From photo</option>
-                    <option>new</option>
-                    <option>like new</option>
-                    <option>good</option>
-                    <option>fair</option>
-                    <option>poor</option>
-                  </select>
-                </label>
-                <label className="grid gap-1 text-sm">
-                  Model
-                  <input
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    className="h-12 rounded-xl border border-line bg-paper px-3"
-                  />
-                </label>
-              </div>
               <div>
-                <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink/45">
-                  Post to
-                </p>
-                <div className="grid grid-cols-2 gap-2">
+                <p className="mb-2 text-[13px] font-medium text-grey">Post to</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   {PLATFORMS.map((platform) => (
                     <label
                       key={platform}
-                      className="flex items-center gap-2 rounded-xl bg-card px-3 py-2 text-sm"
+                      className="flex items-center gap-2 border border-line bg-card px-3 py-2.5 text-[14px]"
                     >
                       <input
                         type="checkbox"
-                        className="accent-sold"
+                        className="accent-ledger"
                         checked={platforms.includes(platform)}
                         onChange={(e) =>
                           setPlatforms((current) =>
@@ -981,12 +1008,22 @@ function ReviewView({
                       />
                       <span className="min-w-0">
                         <span className="block">{platform.replace(" Marketplace", "")}</span>
-                        <span className={`block text-[10px] ${connectionStatus[platform] === "connected" ? "text-sage" : "text-gold"}`}>
-                          {connectionStatus[platform] === "connected" ? (
+                        <span
+                          className={`block font-mono text-[11px] ${
+                            !connectionsLoaded
+                              ? "text-grey"
+                              : connectionStatus[platform] === "connected"
+                                ? "text-ledger"
+                                : "text-grey"
+                          }`}
+                        >
+                          {!connectionsLoaded ? (
+                            "checking…"
+                          ) : connectionStatus[platform] === "connected" ? (
                             "connected"
                           ) : (
                             <Link href="/platforms" className="underline">
-                              connect account
+                              Connect {platform.replace(" Marketplace", "")}
                             </Link>
                           )}
                         </span>
@@ -999,7 +1036,7 @@ function ReviewView({
           ) : (
             <>
               {listing.attributes && (
-                <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
+                <dl className="mt-5 grid grid-cols-2 gap-3 text-[14px]">
                   <Row k="Category" v={listing.attributes.category} />
                   <Row k="Brand" v={listing.attributes.brand || "not visible"} />
                   <Row k="Condition" v={listing.attributes.condition} />
@@ -1007,7 +1044,7 @@ function ReviewView({
                 </dl>
               )}
               {listing.description && (
-                <p className="mt-5 whitespace-pre-wrap text-base leading-relaxed">
+                <p className="mt-5 whitespace-pre-wrap text-[15px] leading-relaxed text-ink">
                   {listing.description}
                 </p>
               )}
@@ -1015,105 +1052,62 @@ function ReviewView({
           )}
 
           {listing.comps && (
-            <div className="mt-5 rounded-2xl bg-card p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink/45">
-                  Comps
-                </p>
-                <span className={`stamp ${verifiedComps ? "text-sage" : "text-gold"}`}>
-                  {verifiedComps
-                    ? `${listing.comps.confidence || "verified"} confidence`
-                    : "no reliable price"}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {sources.map((source) => (
-                  <span key={source} className="stamp text-[9px] text-ink/70">
-                    {source.replace(" (estimated)", "")}
+            <div className="mt-6 border border-line">
+              <div className="flex items-baseline justify-between gap-3 border-b border-line bg-wash/80 px-4 py-3">
+                <p className="text-[14px] font-medium text-ink">Comps</p>
+                {verifiedComps && listing.comps.median != null ? (
+                  <span className="price-tag rounded-sm px-2 py-0.5 text-[14px]">
+                    med {money(listing.comps.median)}
                   </span>
-                ))}
+                ) : (
+                  <span className="font-mono text-[12px] text-grey">
+                    {listing.comps.comps.length} / 3 cited URLs
+                  </span>
+                )}
               </div>
-              {verifiedComps && listing.comps.median != null ? (
-                <p className="mt-2 font-mono text-sm">
-                  {money(listing.comps.min || 0)}–{money(listing.comps.max || 0)} · med{" "}
-                  {money(listing.comps.median)}
+              {(listing.attributes?.search_query || listing.comps.query) && (
+                <p className="border-b border-line px-4 py-2 font-mono text-[12px] text-grey">
+                  query: {listing.attributes?.search_query || listing.comps.query}
                 </p>
-              ) : (
-                <div className="mt-3 rounded-xl bg-wash px-3 py-3 text-sm">
-                  <p className="font-medium">Enter the price yourself.</p>
-                  <p className="mt-1 text-ink/60">
+              )}
+              {!verifiedComps && (
+                <div className="border-b border-line px-4 py-4">
+                  <p className="text-[14px] font-medium text-ink">No suggested ask yet</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-grey">
                     {listing.comps.failure_reason ||
-                      "The marketplace search did not return at least 3 verified comparable listings. Old estimated values are ignored."}
+                      "Fewer than three comps with real listing URLs. Set the ask yourself, or re-run comps after adding clearer photos."}
                   </p>
                 </div>
               )}
-              {listing.comps.comps.length > 0 && (
-                <ul className="mt-3 space-y-1 text-sm">
-                  {listing.comps.comps.slice(0, 5).map((comp, index) => (
+              {listing.comps.comps.length > 0 ? (
+                <ul>
+                  {listing.comps.comps.slice(0, 8).map((comp, index) => (
                     <li
                       key={`${comp.source}-${comp.url}-${comp.price}-${index}`}
-                      className="flex items-center gap-2"
+                      className="grid gap-1 border-b border-line px-4 py-3 last:border-b-0 sm:grid-cols-[1fr_auto]"
                     >
-                      <a
-                        href={comp.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="min-w-0 flex-1 truncate text-ink/70 underline decoration-line"
-                      >
-                        {comp.source}: {comp.title}
-                      </a>
-                      <span
-                        className={`stamp shrink-0 text-[8px] ${comp.sold ? "text-sage" : "text-ink/50"}`}
-                      >
-                        {comp.sold ? "sold" : "asking"}
-                      </span>
-                      <span className="shrink-0 font-mono">
-                        {(comp.quantity || 1) > 1
-                          ? `${comp.quantity}× → ${money(comp.unit_price ?? comp.price / (comp.quantity || 1))}`
-                          : money(comp.unit_price ?? comp.price)}
-                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[14px] text-ink">{comp.title}</p>
+                        <a
+                          href={comp.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 block break-all font-mono text-[11px] text-grey hover:text-ink"
+                        >
+                          {comp.url}
+                        </a>
+                      </div>
+                      <p className="font-mono text-[14px] text-ink sm:text-right">
+                        {money(comp.unit_price ?? comp.price)}
+                        {comp.sold ? " sold" : ""}
+                      </p>
                     </li>
                   ))}
                 </ul>
-              )}
-              {attemptedSources.length > 0 && (
-                <details className="mt-3 border-t border-line pt-2 text-xs text-ink/60">
-                  <summary className="cursor-pointer">
-                    Search details · {successfulSources.length}/{attemptedSources.length} sources
-                  </summary>
-                  <p className="mt-2">
-                    Pricing basis:{" "}
-                    {listing.comps.pricing_basis === "sold"
-                      ? "verified sold prices"
-                      : listing.comps.pricing_basis === "mixed"
-                        ? "sold and asking prices"
-                        : listing.comps.pricing_basis === "asking"
-                          ? "active asking prices"
-                          : "none"}
-                  </p>
-                  {diagnostics.length > 0 && (
-                    <ul className="mt-1 space-y-1">
-                      {diagnostics.map((item) => (
-                        <li key={item.source}>
-                          {item.source}:{" "}
-                          {item.successful
-                            ? `${item.found} found`
-                            : item.reason || "no verified results"}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {listing.comps.session_url && (
-                    <a
-                      href={listing.comps.session_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 inline-block underline"
-                    >
-                      Open Browserbase session
-                    </a>
-                  )}
-                </details>
+              ) : (
+                <div className="px-4 py-6">
+                  <p className="font-mono text-[12px] text-grey">0 cited listing URLs</p>
+                </div>
               )}
             </div>
           )}
@@ -1126,13 +1120,13 @@ function ReviewView({
           />
           {listing.status === "error" && (
             <div className="mt-4">
-              <p className="text-sold">{listing.pipeline_error}</p>
+              <p className="text-stamp">{listing.pipeline_error}</p>
               <button
                 type="button"
                 onClick={runLister}
-                className="mt-3 h-12 w-full rounded-full border border-ink"
+                className="btn-secondary mt-3 w-full"
               >
-                Run the Lister again
+                Run Sold Agent again
               </button>
             </div>
           )}
@@ -1143,27 +1137,30 @@ function ReviewView({
         <div className="safe-bottom border-t border-line bg-card px-4 py-3">
           {listing.status === "ready" && (
             <div className="grid grid-cols-2 gap-3">
-              <label className="grid gap-1 text-xs">
-                {Number.isFinite(price) && price > 0 ? "Listed" : "Your price (required)"}
+              <label className="grid gap-1 text-[12px] font-medium text-grey">
+                {Number.isFinite(price) && price > 0 ? "Ask price" : "Ask price (required)"}
                 <input
                   type="text"
                   inputMode="decimal"
                   placeholder=""
                   value={priceText}
                   onChange={(e) => setPriceText(e.target.value)}
-                  className="h-12 rounded-xl border border-line bg-paper px-3 font-mono"
+                  className="h-11 rounded-lg border border-line bg-paper px-3 text-[15px]"
                 />
               </label>
-              <label className="grid gap-1 text-xs">
-                Floor (hidden)
+              <label className="grid gap-1 rounded-lg border border-line bg-wash px-2.5 py-1.5 text-[12px] font-medium text-ink">
+                Floor price (private)
                 <input
                   type="text"
                   inputMode="decimal"
                   placeholder=""
                   value={floorText}
                   onChange={(e) => setFloorText(e.target.value)}
-                  className="h-12 rounded-xl border border-line bg-paper px-3 font-mono"
+                  className="h-10 border-0 bg-transparent text-[15px] outline-none focus:outline-none"
                 />
+                <span className="text-[11px] font-normal text-grey">
+                  Never shown to buyers
+                </span>
               </label>
             </div>
           )}
@@ -1187,17 +1184,19 @@ function ReviewView({
                   })
                 }
                 disabled={busy === "post" || !canApprove}
-                className="mt-3 h-14 w-full rounded-full bg-sold text-paper disabled:opacity-50"
+                className="btn-primary mt-3 w-full disabled:opacity-50"
               >
-                {busy === "post" ? "Publishing…" : "Approve & publish"}
+                {busy === "post" ? "Posting listing…" : "Post listing"}
               </button>
-              <p className="mt-2 text-center text-xs text-ink/50">
-                {platforms.length === 0
-                  ? "Select a connected platform to publish."
-                  : missingAccounts.length > 0
-                    ? `Connect ${formatPlatformList(missingAccounts)} before you can approve.`
-                    : `This will publish to ${formatPlatformList(platforms)}.`}{" "}
-                <Link href="/platforms" className="underline">
+              <p className="mt-2 text-center text-[12px] text-grey">
+                {!connectionsLoaded
+                  ? "Checking connected accounts…"
+                  : platforms.length === 0
+                    ? "Select a connected platform before posting."
+                    : missingAccounts.length > 0
+                      ? `Connect ${formatPlatformList(missingAccounts)} before you can post.`
+                      : `Posts to ${formatPlatformList(platforms)}. Status stays Submitted until Sold has a public URL.`}{" "}
+                <Link href="/platforms" className="text-ink underline">
                   Accounts
                 </Link>
               </p>
@@ -1206,17 +1205,17 @@ function ReviewView({
                   type="button"
                   onClick={reject}
                   disabled={Boolean(busy)}
-                  className="h-12 rounded-full border border-line text-sm"
+                  className="btn-secondary h-11 text-[13px]"
                 >
                   Don&apos;t post
                 </button>
                 <button
                   type="button"
-                  onClick={discard}
+                  onClick={() => discard()}
                   disabled={Boolean(busy)}
-                  className="h-12 rounded-full text-sm text-sold"
+                  className="h-11 text-[13px] font-medium text-stamp"
                 >
-                  {busy === "takedown" ? "Taking down…" : "Delete"}
+                  {busy === "takedown" ? "Taking down…" : "Delete listing"}
                 </button>
               </div>
             </>
@@ -1234,7 +1233,7 @@ function ReviewView({
                 type="button"
                 onClick={restore}
                 disabled={Boolean(busy)}
-                className="mt-3 h-14 w-full rounded-full bg-ink text-paper"
+                className="btn-primary mt-3 w-full"
               >
                 Restore draft
               </button>
@@ -1242,7 +1241,7 @@ function ReviewView({
                 type="button"
                 onClick={() => discard(true)}
                 disabled={Boolean(busy)}
-                className="mt-2 h-12 w-full rounded-full text-sm text-sold"
+                className="mt-2 h-12 w-full rounded-xl text-sm text-sold"
               >
                 {busy === "takedown" ? "Taking down…" : "Delete forever"}
               </button>
@@ -1255,9 +1254,9 @@ function ReviewView({
         <div className="safe-bottom border-t border-line bg-card px-4 py-3">
           <button
             type="button"
-            onClick={discard}
+            onClick={() => discard()}
             disabled={Boolean(busy)}
-            className="h-12 w-full rounded-full text-sm text-sold"
+            className="h-12 w-full rounded-xl text-sm text-sold"
           >
             Cancel listing
           </button>
@@ -1524,7 +1523,7 @@ function LiveListingView({
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [-webkit-overflow-scrolling:touch]">
         {facebookGone && (
           <div className="mb-3 rounded-2xl bg-card px-4 py-3">
-            <p className="font-serif text-xl">Gone from Facebook</p>
+            <p className="text-[1.15rem] font-semibold tracking-[-0.02em]">Gone from Facebook</p>
             <p className="mt-1 text-sm text-ink/60">
               Chrome checked Selling. This listing is no longer on Marketplace.
             </p>
@@ -1533,7 +1532,7 @@ function LiveListingView({
         <PhotoTray photos={listing.photos} onRemove={() => undefined} onAdd={() => undefined} locked />
         {!editing ? (
           <>
-            <h2 className="mt-5 font-serif text-3xl leading-tight">{listing.title}</h2>
+            <h2 className="mt-5 text-[1.75rem] font-bold tracking-[-0.03em]">{listing.title}</h2>
             <p className="mt-1 font-mono text-lg">{money(listing.price)}</p>
             {listing.description && (
               <p className="mt-5 whitespace-pre-wrap text-base leading-relaxed">
@@ -1623,7 +1622,7 @@ function LiveListingView({
         )}
         {listing.platforms.length > 0 && (
           <div className="mt-5">
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink/45">
+            <p className="mb-2 text-[12px] font-medium text-ink/40">
               Live on
             </p>
             <LiveLinks
@@ -1640,7 +1639,7 @@ function LiveListingView({
           className="mt-5 flex w-full items-center justify-between rounded-2xl bg-card px-4 py-3 text-left"
         >
           <span>
-            <span className="block font-serif text-xl leading-tight">Buyer chats</span>
+            <span className="block text-[1.15rem] font-semibold tracking-[-0.02em]">Buyer chats</span>
             <span className="mt-0.5 block text-sm text-ink/55">
               {buyerCount === 0
                 ? "No marketplace buyers yet. A chat appears only when someone writes you. Demo is practice inside Sold."
@@ -1670,7 +1669,7 @@ function LiveListingView({
                   setEditing(false);
                   setError("");
                 }}
-                className="h-12 rounded-full border border-line text-sm"
+                className="h-12 rounded-xl border border-line text-sm"
               >
                 Cancel
               </button>
@@ -1678,7 +1677,7 @@ function LiveListingView({
                 type="button"
                 disabled={!dirty || saving}
                 onClick={() => void save()}
-                className="h-12 rounded-full bg-ink text-sm text-paper disabled:opacity-50"
+                className="h-12 rounded-xl bg-ink text-sm font-medium text-white disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save"}
               </button>
@@ -1697,7 +1696,7 @@ function LiveListingView({
               type="button"
               disabled={takingDown}
               onClick={() => setEditing(true)}
-              className="h-12 w-full rounded-full bg-ink text-sm text-paper disabled:opacity-50"
+              className="h-12 w-full rounded-xl bg-ink text-sm font-medium text-white disabled:opacity-50"
             >
               Edit post
             </button>
@@ -1705,7 +1704,7 @@ function LiveListingView({
               type="button"
               disabled={takingDown}
               onClick={() => void takeDown()}
-              className="mt-2 h-12 w-full rounded-full text-sm text-sold disabled:opacity-50"
+              className="mt-2 h-12 w-full rounded-xl text-sm text-sold disabled:opacity-50"
             >
               {takingDown
                 ? "Taking down…"
@@ -1745,16 +1744,16 @@ function ThreadList({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {facebookGone && (
           <div className="mb-3 rounded-2xl bg-card px-4 py-3">
-            <p className="font-serif text-xl">Gone from Facebook</p>
+            <p className="text-[1.15rem] font-semibold tracking-[-0.02em]">Gone from Facebook</p>
             <p className="mt-1 text-sm text-ink/60">
               Chrome checked Selling. This listing is no longer on Marketplace.
             </p>
           </div>
         )}
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink/45">
+        <p className="text-[12px] font-medium text-ink/40">
           buyers
         </p>
-        <h2 className="mt-1 font-serif text-3xl leading-tight">
+        <h2 className="mt-1 text-[1.75rem] font-bold tracking-[-0.03em]">
           Each person is a thread.
         </h2>
         <p className="mt-2 text-sm text-ink/60">
@@ -1769,7 +1768,7 @@ function ThreadList({
                 onClick={() => onOpen(thread.id)}
                 className="flex w-full items-center gap-3 px-3 py-3 text-left active:bg-wash/60"
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-wash font-serif text-lg">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-wash text-lg font-semibold">
                   {thread.buyer_name.slice(0, 1)}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -1810,6 +1809,8 @@ function ChatView({
   busy,
   error,
   send,
+  stampAccept,
+  listingSold,
   chatEnd,
   onActivity,
   watchingFacebook,
@@ -1826,18 +1827,28 @@ function ChatView({
   busy: string;
   error: string;
   send: (text?: string) => void;
+  stampAccept: (messageId: string) => void;
+  listingSold: boolean;
   chatEnd: React.RefObject<HTMLDivElement | null>;
   onActivity: () => void;
   watchingFacebook?: boolean;
   facebookGone?: boolean;
 }) {
   const lastAgent = [...events].reverse().find((e) => e.agent === "negotiator");
+  const pendingStamp = [...messages]
+    .reverse()
+    .find(
+      (message) =>
+        message.sender === "agent" &&
+        message.action === "accept" &&
+        !listingSold
+    );
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-3 [-webkit-overflow-scrolling:touch]">
         {facebookGone && (
           <div className="rounded-2xl bg-card px-4 py-3">
-            <p className="font-serif text-xl">Gone from Facebook</p>
+            <p className="text-[1.15rem] font-semibold tracking-[-0.02em]">Gone from Facebook</p>
             <p className="mt-1 text-sm text-ink/60">
               Chrome checked Selling. This listing is no longer on Marketplace,
               so Sold stopped watching it.
@@ -1846,38 +1857,57 @@ function ChatView({
         )}
         {messages.length === 0 && !facebookGone && (
           <div className="rounded-2xl bg-card px-4 py-3">
-            <p className="font-serif text-xl">
+            <p className="text-[1.15rem] font-semibold tracking-[-0.02em]">
               {watchingFacebook ? "Watching Facebook" : "Start the conversation"}
             </p>
             <p className="mt-1 text-sm text-ink/60">
               {watchingFacebook
-                ? `Sold is watching Marketplace for ${buyerName}. When they write, the reply lands in this thread.`
-                : `Message as ${buyerName}, or switch to You to reply directly.`}
+                ? `Sold is watching Marketplace for ${buyerName}. When they write, the draft lands in this thread — you reply on Facebook.`
+                : `Message as ${buyerName}, or switch to You to reply directly. Agent replies are drafts until you stamp an accept.`}
             </p>
           </div>
         )}
         {messages.map((message) => (
-          <Bubble key={message.id} message={message} />
+          <Bubble
+            key={message.id}
+            message={message}
+            showStamp={pendingStamp?.id === message.id}
+            onStamp={() => void stampAccept(message.id)}
+            stampBusy={busy === "stamp"}
+          />
         ))}
         {busy === "chat" && (
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-sold">
+          <p className="text-[12px] font-medium text-sold">
             Negotiator deciding…
           </p>
         )}
         <div ref={chatEnd} />
       </div>
 
-      <div className="safe-bottom shrink-0 border-t border-line bg-card px-3 pt-2 shadow-[0_-8px_24px_rgba(28,22,18,0.06)]">
+      <div className="safe-bottom shrink-0 border-t border-line bg-paper px-3 pt-2">
+        {facebookGone ? null : watchingFacebook ? (
+          <p className="mb-2 text-[12px] text-grey">
+            Facebook thread · monitor-only. Reply on Facebook; Sold shows the messages here.
+          </p>
+        ) : pendingStamp ? (
+          <p className="mb-2 text-[12px] text-stamp">
+            Accept draft ready. Stamp to mark sold — Sold will not send this for you yet.
+          </p>
+        ) : (
+          <p className="mb-2 text-[12px] text-grey">
+            Agent replies stay in Sold as drafts. Floor is enforced in code, not just the prompt.
+          </p>
+        )}
         <div className="mb-1.5 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onActivity}
-            className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-ink/50"
+            className="min-w-0 truncate text-[12px] font-medium text-grey"
           >
-            {lastAgent ? `${lastAgent.action} · tap log` : "Agent log"}
+            {lastAgent ? `${lastAgent.action} · activity` : "Activity"}
           </button>
-          <div className="flex shrink-0 rounded-full bg-wash p-0.5 font-mono text-[9px] uppercase tracking-[0.1em]">
-            <label className={`cursor-pointer rounded-full px-2 py-1 ${sender === "buyer" ? "bg-ink text-paper" : "text-ink/55"}`}>
+          <div className="flex shrink-0 rounded-lg border border-line bg-wash p-0.5 text-[12px] font-semibold">
+            <label className={`cursor-pointer px-2 py-1 ${sender === "buyer" ? "bg-ink text-paper" : "text-grey"}`}>
               <input
                 type="radio"
                 checked={sender === "buyer"}
@@ -1886,7 +1916,7 @@ function ChatView({
               />
               Buyer
             </label>
-            <label className={`cursor-pointer rounded-full px-2 py-1 ${sender === "human" ? "bg-ink text-paper" : "text-ink/55"}`}>
+            <label className={`cursor-pointer px-2 py-1 ${sender === "human" ? "bg-ink text-paper" : "text-grey"}`}>
               <input
                 type="radio"
                 checked={sender === "human"}
@@ -1906,7 +1936,7 @@ function ChatView({
                 setSender("buyer");
                 void send(chip);
               }}
-              className="shrink-0 rounded-full border border-line bg-paper/60 px-2.5 py-1 text-[11px] text-ink/70"
+              className="shrink-0 border border-line bg-card px-2.5 py-1 text-[12px] text-grey"
             >
               {chip}
             </button>
@@ -1922,18 +1952,25 @@ function ChatView({
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={sender === "human" ? "Reply as Alex…" : `Message as ${buyerName}…`}
-            className="h-11 min-w-0 flex-1 rounded-full border border-line bg-paper px-4 text-[16px]"
+            placeholder={
+              watchingFacebook
+                ? "Monitor-only — reply on Facebook"
+                : sender === "human"
+                  ? "Your reply (stays in Sold until you send on the marketplace)…"
+                  : `Message as ${buyerName}…`
+            }
+            disabled={watchingFacebook}
+            className="h-11 min-w-0 flex-1 border border-line bg-card px-3 text-[16px] disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={busy === "chat"}
-            className="h-11 shrink-0 rounded-full bg-ink px-4 text-sm text-paper disabled:opacity-50"
+            disabled={busy === "chat" || watchingFacebook}
+            className="btn-primary h-11 shrink-0 px-4 text-[13px] disabled:opacity-50"
           >
-            Send
+            {sender === "human" ? "Save reply" : "Send message"}
           </button>
         </form>
-        {error && <p className="pb-2 text-sm text-sold">{error}</p>}
+        {error && <p className="pb-2 text-[13px] text-stamp">{error}</p>}
       </div>
     </div>
   );
@@ -1970,7 +2007,7 @@ function Ticket({
 }) {
   return (
     <div>
-      <h2 className="font-serif text-3xl leading-tight">{listing.title}</h2>
+      <h2 className="text-[1.75rem] font-bold tracking-[-0.03em]">{listing.title}</h2>
       <p className="mt-1 font-mono text-lg">{money(listing.price)}</p>
       {listing.description && (
         <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-ink/80">
@@ -1982,7 +2019,7 @@ function Ticket({
       )}
       {listing.platforms.length > 0 && (
         <div className="mt-4">
-          <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink/45">
+          <p className="mb-2 text-[12px] font-medium text-ink/40">
             Platforms
           </p>
           <LiveLinks
@@ -2015,7 +2052,7 @@ function FacebookReviewNotice({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
         <p className="stamp w-fit text-ink/70">in review</p>
-        <h2 className="mt-3 font-serif text-3xl leading-tight">
+        <h2 className="mt-3 text-[1.75rem] font-bold tracking-[-0.03em]">
           Waiting on Facebook review.
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-ink/70">
@@ -2063,7 +2100,7 @@ function PostingProgress({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
         <p className="stamp w-fit text-sage">posting</p>
-        <h2 className="mt-3 font-serif text-3xl leading-tight">{headline}</h2>
+        <h2 className="mt-3 text-[1.75rem] font-bold tracking-[-0.03em]">{headline}</h2>
         <p className="mt-3 text-sm leading-relaxed text-ink/70">
           {listing.pipeline_stage || "The operator is filling the live form. This screen updates as each marketplace posts."}
         </p>
@@ -2118,7 +2155,7 @@ function UnfinishedPost({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
         <p className="stamp w-fit text-sold">failed</p>
-        <h2 className="mt-3 font-serif text-3xl leading-tight">
+        <h2 className="mt-3 text-[1.75rem] font-bold tracking-[-0.03em]">
           Publishing failed on {formatPlatformList(pending) || "the marketplace"}.
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-ink/70">
@@ -2150,7 +2187,7 @@ function UnfinishedPost({
           type="button"
           onClick={onDiscard}
           disabled={Boolean(busy)}
-          className="h-12 w-full rounded-full text-sm text-sold"
+          className="h-12 w-full rounded-xl text-sm text-sold"
         >
           {busy === "takedown" || busy === "reject"
             ? "Taking down live listings…"
@@ -2259,7 +2296,7 @@ function LiveLinks({
                 type="button"
                 onClick={onResume}
                 disabled={busy === "post" || !connected}
-                className="mt-2 h-9 w-full rounded-full bg-sold px-3 text-xs text-paper disabled:opacity-50"
+                className="mt-2 h-9 w-full rounded-xl bg-sold px-3 text-xs font-medium text-white disabled:opacity-50"
               >
                 {busy === "post" ? "Publishing…" : "Try publishing again"}
               </button>
@@ -2269,6 +2306,14 @@ function LiveLinks({
       })}
     </ul>
   );
+}
+
+function agentLabel(agent: string) {
+  if (agent === "evaluator") return "pricing";
+  if (agent === "lister") return "sold agent";
+  if (agent === "browser") return "browser";
+  if (agent === "negotiator") return "negotiator";
+  return agent;
 }
 
 function ActivityList({
@@ -2283,24 +2328,24 @@ function ActivityList({
   return (
     <div className={compact ? "mt-2 space-y-2" : "space-y-3"}>
       {events.length === 0 && (
-        <p className="text-sm text-ink/45">No agent activity yet.</p>
+        <p className="text-sm text-ink/45">No activity yet.</p>
       )}
       {events.map((event) => (
         <div key={event.id} className="text-sm">
           <div className="flex items-center gap-2">
             <span className="stamp text-[9px] text-ink">{event.action}</span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/45">
-              {event.agent}
+            <span className="text-[12px] text-ink/40">
+              {agentLabel(event.agent)}
             </span>
-            <span className="ml-auto font-mono text-[10px] text-ink/35">
+            <span className="ml-auto text-[11px] text-ink/30">
               {formatAgo(Math.max(0, Date.now() - Date.parse(event.timestamp)))}
             </span>
           </div>
-          <p className="mt-1 text-ink/75">{event.detail}</p>
+          <p className="mt-1 text-ink/70">{event.detail}</p>
         </div>
       ))}
       {busy && (
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-sage">
+        <p className="text-[12px] font-medium text-sage">
           {busyLabel(busy)}
         </p>
       )}
@@ -2344,31 +2389,31 @@ function AgentLog({
       : latest?.detail || latest?.action || "No activity yet";
 
   return (
-    <section className="mt-5 rounded-2xl border border-line bg-card/70">
+    <section className="panel mt-5 overflow-hidden">
       <button
         type="button"
         aria-expanded={expanded}
         aria-controls="agent-log-events"
         onClick={() => setExpanded((current) => !current)}
-        className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
+        className="flex min-h-12 w-full items-center gap-3 px-3.5 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ledger focus-visible:ring-offset-2 focus-visible:ring-offset-paper"
       >
         <span
           aria-hidden="true"
-          className={`h-2 w-2 shrink-0 rounded-full ${
+          className={`h-1.5 w-1.5 shrink-0 ${
             stuck
               ? "animate-pulse bg-gold"
               : working
-                ? "animate-pulse bg-sage"
-                : "bg-ink/25"
+                ? "animate-pulse rounded-md bg-ink"
+                : "bg-line"
           }`}
         />
         <span className="min-w-0 flex-1">
-          <span className="block font-mono text-[10px] uppercase tracking-[0.16em] text-ink/45">
-            Agent log · {eventCount}
+          <span className="block text-[12px] text-grey">
+            Activity · {eventCount}
           </span>
           <span
-            className={`block truncate text-sm ${
-              stuck ? "text-gold" : working ? "text-sage" : "text-ink/75"
+            className={`block truncate text-[14px] ${
+              stuck ? "text-gold" : working ? "text-ink" : "text-grey"
             }`}
           >
             {summary}
@@ -2389,20 +2434,20 @@ function AgentLog({
               event.stopPropagation();
               if (!stopping) onStop();
             }}
-            className="shrink-0 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-sold"
+            className="shrink-0 px-2 py-1 text-[12px] font-medium text-stamp"
           >
             {stopping || /stopping/i.test(stage || "") ? "Stopping…" : "Stop"}
           </span>
         )}
         <span
           aria-hidden="true"
-          className={`shrink-0 text-sm text-ink/45 transition-transform ${expanded ? "rotate-180" : ""}`}
+          className={`shrink-0 text-sm text-grey transition-transform ${expanded ? "rotate-180" : ""}`}
         >
           ↓
         </span>
       </button>
       {expanded && (
-        <div id="agent-log-events" className="border-t border-line px-3 pb-3">
+        <div id="agent-log-events" className="border-t border-line px-3.5 pb-3 pt-1">
           <ActivityList events={events} busy={busy} compact />
           <div ref={end} />
         </div>
@@ -2415,7 +2460,7 @@ function busyLabel(busy: string) {
   return busy === "chat"
     ? "Negotiator deciding…"
     : busy === "lister"
-      ? "Agents working…"
+      ? "Sold Agent working…"
       : busy === "revise"
         ? "Updating live listing…"
         : busy === "takedown"
@@ -2428,8 +2473,66 @@ function busyLabel(busy: string) {
 function Row({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <dt className="text-ink/45">{k}</dt>
-      <dd>{v}</dd>
+      <dt className="text-[12px] text-grey">{k}</dt>
+      <dd className="text-[14px] text-ink">{v}</dd>
+    </div>
+  );
+}
+
+function StatusManifest({ listing }: { listing: Listing }) {
+  const livePost = listing.platform_posts.find(
+    (post) =>
+      post.platform !== "Gmail receipt" &&
+      post.status === "posted" &&
+      post.remote_state !== "review" &&
+      (post.url || post.remote_url)
+  );
+
+  let label = "Draft";
+  let className = "badge-draft";
+  let note =
+    listing.status === "ready"
+      ? "Ready for your review. Nothing has posted."
+      : listing.pipeline_stage || "Not posted.";
+  let url: string | null = null;
+  let stamped = false;
+
+  if (listing.status === "sold") {
+    label = "Sold";
+    note = "Marked sold.";
+    url = livePost?.url || livePost?.remote_url || null;
+    stamped = true;
+  } else if (livePost) {
+    label = "Live";
+    note = "Public URL on file.";
+    url = livePost.url || livePost.remote_url || null;
+    stamped = true;
+  } else if (listing.status === "posting") {
+    label = "Submitted";
+    className = "badge-submitted";
+    note = "Form filled. Not live until a public URL exists.";
+  }
+
+  return (
+    <div className="mt-4 border border-line px-3 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {stamped ? (
+          <RubberStamp label={label} size="sm" rotate={-4} className="rubber-stamp--static" />
+        ) : (
+          <span className={`stamp ${className}`}>{label}</span>
+        )}
+        <span className="text-[13px] text-grey">{note}</span>
+      </div>
+      {url && (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 block break-all font-mono text-[11px] text-ink"
+        >
+          {url}
+        </a>
+      )}
     </div>
   );
 }
@@ -2437,14 +2540,13 @@ function Row({ k, v }: { k: string; v: string }) {
 function Pipeline({ listing, busy }: { listing: Listing; busy: boolean }) {
   const steps = [
     { key: "photo", label: "Photo", done: listing.photos.length > 0 },
-    { key: "vision", label: "Vision", done: Boolean(listing.attributes) },
-    { key: "comps", label: "Comps", done: Boolean(listing.comps) },
+    { key: "identify", label: "Identify", done: Boolean(listing.attributes) },
     {
-      key: "eval",
-      label: "Eval",
-      done: Boolean(listing.comps?.evaluated),
+      key: "comps",
+      label: "Comps",
+      done: Boolean(listing.comps && listing.comps.comps.length >= 3),
     },
-    { key: "copy", label: "Copy", done: Boolean(listing.title) },
+    { key: "draft", label: "Draft", done: Boolean(listing.title) },
     {
       key: "live",
       label: listing.status === "sold" ? "Sold" : "Live",
@@ -2453,14 +2555,22 @@ function Pipeline({ listing, busy }: { listing: Listing; busy: boolean }) {
   ];
   const next = steps.findIndex((s) => !s.done);
   return (
-    <ol className="flex gap-1">
+    <ol className="flex gap-2">
       {steps.map((step, i) => (
         <li key={step.key} className="flex-1">
           <span
-            className={`block h-1 rounded-full ${step.done ? "bg-sage" : busy && i === next ? "bg-sold" : "bg-ink/15"}`}
+            className={`block h-0.5 ${
+              step.done
+                ? "rounded-md bg-ink"
+                : busy && i === next
+                  ? "bg-ink"
+                  : "bg-line"
+            }`}
           />
           <span
-            className={`mt-1 block font-mono text-[9px] uppercase tracking-[0.12em] ${step.done ? "text-ink" : "text-ink/35"}`}
+            className={`mt-1.5 block text-[11px] font-medium ${
+              step.done ? "text-ink" : "text-grey"
+            }`}
           >
             {step.label}
           </span>
@@ -2470,29 +2580,51 @@ function Pipeline({ listing, busy }: { listing: Listing; busy: boolean }) {
   );
 }
 
-function Bubble({ message }: { message: Message }) {
+function Bubble({
+  message,
+  showStamp,
+  onStamp,
+  stampBusy,
+}: {
+  message: Message;
+  showStamp?: boolean;
+  onStamp?: () => void;
+  stampBusy?: boolean;
+}) {
   const mine = message.sender !== "buyer";
   const decision = message.decision || message.escalate_reason;
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${mine ? "rounded-br-sm bg-ink text-paper" : "rounded-bl-sm bg-wash"}`}
+        className={`max-w-[85%] px-3 py-2 text-[14px] ${
+          mine ? "bg-ink text-paper" : "border border-line bg-card text-ink"
+        }`}
       >
         <div className="mb-1 flex items-center justify-between gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-[0.16em] opacity-70">
-            {message.sender === "agent" ? "negotiator" : message.sender}
+          <span className="text-[11px] font-medium opacity-70">
+            {message.sender === "agent" ? "Sold Agent" : message.sender}
           </span>
           {message.action && (
             <ActionStamp action={message.action as NegotiatorAction} />
           )}
         </div>
-        <p>{message.text}</p>
+        {message.text ? <p>{message.text}</p> : null}
         {decision && message.sender === "agent" && (
           <p
-            className={`mt-2 font-mono text-[10px] uppercase tracking-[0.12em] ${mine ? "text-gold" : "text-ink/50"}`}
+            className={`mt-2 text-[11px] font-medium ${mine ? "text-gold" : "text-grey"}`}
           >
             Why: {decision}
           </p>
+        )}
+        {showStamp && onStamp && (
+          <button
+            type="button"
+            onClick={onStamp}
+            disabled={stampBusy}
+            className="mt-3 inline-flex items-center gap-2 border border-stamp/40 bg-paper px-3 py-1.5 text-[12px] font-medium text-stamp disabled:opacity-50"
+          >
+            {stampBusy ? "Stamping…" : "Stamp accept · mark sold"}
+          </button>
         )}
       </div>
     </div>

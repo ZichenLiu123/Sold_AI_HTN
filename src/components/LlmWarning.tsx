@@ -15,8 +15,8 @@ export function LlmWarning() {
   if (!missing) return null;
 
   return (
-    <p className="border-t border-line bg-wash px-4 py-2 text-center text-xs text-ink/70">
-      Add an OpenAI or Anthropic key to run the agents.
+    <p className="border-t border-line bg-wash/80 px-5 py-2 text-center text-[12px] text-grey">
+      Add an API key in <span className="font-medium text-ink">.env</span> to run Sold Agent.
     </p>
   );
 }

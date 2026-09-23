@@ -1,0 +1,110 @@
+[
+  {
+    "id": "owala-freesip-32",
+    "note": "Insulated bottle with FreeSip lid",
+    "attributes": {
+      "category": "water bottle",
+      "brand": "Owala",
+      "model": "FreeSip 32oz",
+      "condition": "like new",
+      "flaws": [],
+      "color": "gray",
+      "notable_features": ["push-button spout"],
+      "visible_text": ["OWALA", "FREESIP", "32 OZ"],
+      "search_query": "Owala FreeSip 32oz water bottle",
+      "confidence": "high"
+    },
+    "expected": {
+      "search_query": "Owala FreeSip 32oz water bottle",
+      "must_include": ["owala", "freesip"],
+      "must_exclude": ["used", "sale", "cheap", "gray"],
+      "median_band": [12, 40]
+    }
+  },
+  {
+    "id": "oasis-apple-300ml",
+    "note": "Grocery juice carton",
+    "attributes": {
+      "category": "juice",
+      "brand": "OASIS",
+      "model": "Apple 300 mL",
+      "condition": "new",
+      "flaws": [],
+      "color": null,
+      "notable_features": [],
+      "visible_text": ["OASIS", "APPLE", "300 mL"],
+      "search_query": "OASIS apple juice 300ml",
+      "confidence": "high"
+    },
+    "expected": {
+      "search_query": "OASIS apple juice 300ml",
+      "must_include": ["oasis", "apple"],
+      "must_exclude": ["nutrition", "vitamin", "for sale"],
+      "median_band": [1, 8]
+    }
+  },
+  {
+    "id": "macbook-air-notch",
+    "note": "Laptop with notch — must not become vintage MacBook",
+    "attributes": {
+      "category": "laptop",
+      "brand": "Apple",
+      "model": "MacBook Air",
+      "condition": "good",
+      "flaws": ["light scratch on lid"],
+      "color": "silver",
+      "notable_features": ["display notch"],
+      "visible_text": ["MacBook Air"],
+      "search_query": "Apple MacBook Air 13 inch",
+      "confidence": "high"
+    },
+    "expected": {
+      "search_query": "Apple MacBook Air",
+      "must_include": ["apple", "macbook", "air"],
+      "must_exclude": ["2011", "el capitan", "for sale", "used"],
+      "median_band": [400, 1200]
+    }
+  },
+  {
+    "id": "blue-gift-box-no-brand",
+    "note": "No brand — descriptive Google query only",
+    "attributes": {
+      "category": "gift box",
+      "brand": null,
+      "model": null,
+      "condition": "good",
+      "flaws": [],
+      "color": "blue",
+      "notable_features": ["ribbon closure"],
+      "visible_text": [],
+      "search_query": "blue ribbon gift box",
+      "confidence": "medium"
+    },
+    "expected": {
+      "search_query": "blue ribbon gift box",
+      "must_include": ["blue", "gift", "box"],
+      "must_exclude": ["good", "condition", "sale"]
+    }
+  },
+  {
+    "id": "noisy-vision-query",
+    "note": "Vision sometimes adds sale fluff — normalize must strip it",
+    "attributes": {
+      "category": "water bottle",
+      "brand": "Owala",
+      "model": "FreeSip",
+      "condition": "like new",
+      "flaws": [],
+      "color": null,
+      "notable_features": [],
+      "visible_text": ["OWALA"],
+      "search_query": "Owala FreeSip 32oz for sale used cheap",
+      "confidence": "high"
+    },
+    "expected": {
+      "search_query": "Owala FreeSip 32oz water bottle",
+      "must_include": ["owala", "freesip"],
+      "must_exclude": ["sale", "used", "cheap"]
+    }
+  }
+]

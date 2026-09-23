@@ -1,4 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="28" fill="#C5281C"/>
-  <text x="64" y="82" text-anchor="middle" font-family="Georgia, serif" font-size="52" fill="#FAF4EA">S</text>
+  <rect width="128" height="128" fill="#14231B"/>
+  <text
+    x="64"
+    y="88"
+    text-anchor="middle"
+    font-family="ui-sans-serif, system-ui, sans-serif"
+    font-weight="800"
+    font-size="72"
+    letter-spacing="-0.06em"
+    fill="#FAF8F3"
+  >S</text>
 </svg>

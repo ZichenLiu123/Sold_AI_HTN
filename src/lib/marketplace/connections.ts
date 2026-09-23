@@ -4,11 +4,11 @@ import {
   upsertPlatformConnection,
 } from "../db";
 import {
-  DEMO_USER,
   PLATFORMS,
   type Platform,
   type PlatformConnection,
 } from "../types";
+import { sellerId } from "../seller-context";
 import { getMarketplaceAdapter } from "./adapters";
 import { platformSlug } from "../platforms";
 import { statusFromLoginEvidence } from "./policy";
@@ -18,12 +18,16 @@ import {
   createPersistentContext,
   disconnectSession,
   getBrowserbaseSession,
+  openLoginPage,
   releaseSession,
   releaseSoldSessions,
+  remoteMinutesExhausted,
   sessionLiveUrl,
   startMarketplaceSession,
 } from "./browserbase";
 import { isLocalConnection, openLocalLogin } from "./local-browser";
+
+export { remoteMinutesExhausted };
 
 export type PublicConnection = PlatformConnection & { live_url?: string | null };
 
@@ -34,7 +38,7 @@ const loginLocks = globalThis as unknown as {
 function emptyConnection(platform: Platform): PlatformConnection {
   const now = new Date().toISOString();
   return {
-    user_id: DEMO_USER.id,
+    user_id: sellerId(),
     platform,
     context_id: null,
     session_id: null,
@@ -48,7 +52,7 @@ function emptyConnection(platform: Platform): PlatformConnection {
 }
 
 export async function getLiveLoginUrl(platform: Platform): Promise<string | null> {
-  const connection = await getPlatformConnection(DEMO_USER.id, platform);
+  const connection = await getPlatformConnection(sellerId(), platform);
   if (!connection?.session_id) return null;
   return connection.metadata.live_url || null;
 }
@@ -57,7 +61,8 @@ export async function ensureLiveLogin(
   platform: Platform,
   options?: { fresh?: boolean }
 ): Promise<string> {
-  const inflight = loginLocks.soldBeginConnection?.get(platform);
+  const lockKey = `${sellerId()}:${platform}`;
+  const inflight = loginLocks.soldBeginConnection?.get(lockKey);
   if (inflight) {
     const started = await inflight;
     if (started.live_url) return started.live_url;
@@ -77,7 +82,7 @@ export async function listConnections(options?: {
   includeLive?: boolean;
 }): Promise<PublicConnection[]> {
   const existing = new Map(
-    (await listPlatformConnections(DEMO_USER.id)).map((connection) => [
+    (await listPlatformConnections(sellerId())).map((connection) => [
       connection.platform,
       connection,
     ])
@@ -98,25 +103,26 @@ export async function listConnections(options?: {
 }
 
 function contextName(platform: Platform) {
-  return `sold-${DEMO_USER.id}-${platform.toLowerCase().replace(/\W+/g, "-")}`;
+  return `sold-${sellerId()}-${platform.toLowerCase().replace(/\W+/g, "-")}`;
 }
 
 export async function beginConnection(platform: Platform): Promise<PublicConnection> {
+  const lockKey = `${sellerId()}:${platform}`;
   loginLocks.soldBeginConnection ??= new Map();
-  const existing = loginLocks.soldBeginConnection.get(platform);
+  const existing = loginLocks.soldBeginConnection.get(lockKey);
   if (existing) return existing;
   const run = startConnection(platform);
-  loginLocks.soldBeginConnection.set(platform, run);
+  loginLocks.soldBeginConnection.set(lockKey, run);
   try {
     return await run;
   } finally {
-    loginLocks.soldBeginConnection.delete(platform);
+    loginLocks.soldBeginConnection.delete(lockKey);
   }
 }
 
 async function startConnection(platform: Platform): Promise<PublicConnection> {
   const current =
-    (await getPlatformConnection(DEMO_USER.id, platform)) || emptyConnection(platform);
+    (await getPlatformConnection(sellerId(), platform)) || emptyConnection(platform);
   let contextId = current.context_id;
   if (!contextId) {
     contextId = (await createPersistentContext(contextName(platform))).id;
@@ -151,8 +157,16 @@ async function startConnection(platform: Platform): Promise<PublicConnection> {
   }
   const adapter = getMarketplaceAdapter(platform);
   const now = new Date().toISOString();
+  // Navigate the cloud tab to the marketplace sign-in page before handing
+  // the live view to the seller. openLoginPage disconnects our CDP client
+  // but leaves the Browserbase session running on that URL.
+  const landed = await openLoginPage(
+    created.id,
+    adapter.loginUrl,
+    created.connectUrl
+  ).catch(() => adapter.loginUrl);
   const liveUrl =
-    (await sessionLiveUrl(created.id).catch(() => null)) ||
+    (await sessionLiveUrl(created.id, adapter.domains[0]).catch(() => null)) ||
     `https://www.browserbase.com/sessions/${created.id}`;
   const saved = await upsertPlatformConnection({
     ...current,
@@ -164,9 +178,10 @@ async function startConnection(platform: Platform): Promise<PublicConnection> {
     error: null,
     metadata: {
       ...current.metadata,
-      last_url: adapter.loginUrl,
+      last_url: landed || adapter.loginUrl,
       live_url: liveUrl,
       stealth: created.stealth || "none",
+      ...(remoteMinutesExhausted() ? { minutes: "spent" } : {}),
     },
   });
   return { ...saved, live_url: liveUrl };
@@ -174,7 +189,7 @@ async function startConnection(platform: Platform): Promise<PublicConnection> {
 
 export async function beginLocalConnection(platform: Platform): Promise<PublicConnection> {
   const current =
-    (await getPlatformConnection(DEMO_USER.id, platform)) || emptyConnection(platform);
+    (await getPlatformConnection(sellerId(), platform)) || emptyConnection(platform);
   const adapter = getMarketplaceAdapter(platform);
   const page = await openLocalLogin(platform, adapter.loginUrl);
   const now = new Date().toISOString();
@@ -197,7 +212,7 @@ export async function beginLocalConnection(platform: Platform): Promise<PublicCo
 
 export async function checkLocalConnection(platform: Platform): Promise<PublicConnection> {
   const current =
-    (await getPlatformConnection(DEMO_USER.id, platform)) || emptyConnection(platform);
+    (await getPlatformConnection(sellerId(), platform)) || emptyConnection(platform);
   const adapter = getMarketplaceAdapter(platform);
   const page = await openLocalLogin(platform, adapter.loginUrl);
   if (platform === "Facebook Marketplace") {
@@ -236,7 +251,7 @@ export async function checkLocalConnection(platform: Platform): Promise<PublicCo
 
 export async function disconnectConnection(platform: Platform): Promise<PublicConnection> {
   const current =
-    (await getPlatformConnection(DEMO_USER.id, platform)) || emptyConnection(platform);
+    (await getPlatformConnection(sellerId(), platform)) || emptyConnection(platform);
   if (current.session_id) {
     await Promise.race([
       releaseSession(current.session_id),
@@ -261,7 +276,7 @@ export async function disconnectConnection(platform: Platform): Promise<PublicCo
 }
 
 export async function checkConnection(platform: Platform): Promise<PublicConnection> {
-  const current = await getPlatformConnection(DEMO_USER.id, platform);
+  const current = await getPlatformConnection(sellerId(), platform);
   if (current && isLocalConnection(current.metadata)) {
     return checkLocalConnection(platform);
   }

@@ -47,70 +47,74 @@ export function SellerProfileCard() {
   }
 
   return (
-    <form onSubmit={(event) => void save(event)} className="rounded-2xl bg-card px-4 py-4">
+    <form onSubmit={(event) => void save(event)} className="panel px-4 py-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-serif text-xl">Profile</p>
-        <span className={`stamp ${profileReadyForPosting(profile) ? "text-sage" : "text-gold"}`}>
-          {profileReadyForPosting(profile) ? "ready" : "needed"}
+        <p className="text-[15px] font-semibold tracking-tight text-ink">Seller profile</p>
+        <span
+          className={`stamp ${
+            profileReadyForPosting(profile) ? "badge-live" : "badge-submitted"
+          }`}
+        >
+          {profileReadyForPosting(profile) ? "Ready" : "Needed"}
         </span>
       </div>
-      <p className="mt-1 text-sm text-ink/60">
-        Sold uses this city, ZIP, and pickup when it posts. It will not invent an
-        address.
+      <p className="mt-1.5 text-[13px] leading-relaxed text-grey">
+        City, ZIP, and pickup notes for posts. Sold will not invent an address.
       </p>
-      <div className="mt-3 grid gap-3">
-        <Field name="name" label="Name" defaultValue={profile.name} placeholder="how buyers should know you" />
+      <div className="mt-4 grid gap-3">
+        <label className="field">
+          Name
+          <input
+            key={`name:${profile.name}`}
+            name="name"
+            defaultValue={profile.name}
+            placeholder="how buyers should know you"
+          />
+        </label>
         <div className="grid grid-cols-2 gap-3">
-          <Field name="city" label="City" defaultValue={profile.city} placeholder="Brooklyn" />
-          <Field name="zip" label="ZIP" defaultValue={profile.zip} placeholder="11215" />
+          <label className="field">
+            City
+            <input
+              key={`city:${profile.city}`}
+              name="city"
+              defaultValue={profile.city}
+              placeholder="Brooklyn"
+            />
+          </label>
+          <label className="field">
+            ZIP
+            <input
+              key={`zip:${profile.zip}`}
+              name="zip"
+              defaultValue={profile.zip}
+              placeholder="11215"
+            />
+          </label>
         </div>
-        <Field
-          name="neighborhood"
-          label="Neighborhood"
-          defaultValue={profile.neighborhood}
-          placeholder="optional"
-        />
-        <Field
-          name="pickup_notes"
-          label="Pickup"
-          defaultValue={profile.pickup_notes}
-          placeholder="weekends, sidewalk, after 6…"
-        />
+        <label className="field">
+          Neighborhood
+          <input
+            key={`neighborhood:${profile.neighborhood}`}
+            name="neighborhood"
+            defaultValue={profile.neighborhood}
+            placeholder="optional"
+          />
+        </label>
+        <label className="field">
+          Pickup
+          <input
+            key={`pickup:${profile.pickup_notes}`}
+            name="pickup_notes"
+            defaultValue={profile.pickup_notes}
+            placeholder="weekends, sidewalk, after 6…"
+          />
+        </label>
       </div>
-      {error && <p className="mt-3 text-sm text-sold">{error}</p>}
-      {saved && <p className="mt-3 text-sm text-sage">Saved.</p>}
-      <button
-        type="submit"
-        disabled={busy}
-        className="mt-3 h-10 w-full rounded-full bg-ink text-xs text-paper disabled:opacity-50"
-      >
+      {error && <p className="mt-3 text-[13px] text-stamp">{error}</p>}
+      {saved && <p className="mt-3 text-[13px] text-ledger">Saved.</p>}
+      <button type="submit" disabled={busy} className="btn-primary mt-4 h-10 w-full text-[13px]">
         {busy ? "Saving…" : "Save profile"}
       </button>
     </form>
-  );
-}
-
-function Field({
-  name,
-  label,
-  defaultValue,
-  placeholder,
-}: {
-  name: string;
-  label: string;
-  defaultValue: string;
-  placeholder: string;
-}) {
-  return (
-    <label className="grid gap-1 text-sm">
-      {label}
-      <input
-        key={`${name}:${defaultValue}`}
-        name={name}
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        className="h-12 rounded-xl border border-line bg-paper px-3"
-      />
-    </label>
   );
 }

@@ -18,7 +18,7 @@ export function NewListingForm() {
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (files.length === 0) {
-      setError("Add at least one photo.");
+      setError("Add at least one photo before listing.");
       return;
     }
     setBusy(true);
@@ -38,13 +38,13 @@ export function NewListingForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex min-h-[70dvh] flex-col px-4 py-4">
-      <h1 className="font-serif text-4xl leading-tight">New listing.</h1>
-      <p className="mt-1 text-sm text-ink/60">
-        Take a few angles. The agent reads every photo.
+    <form onSubmit={onSubmit} className="flex min-h-[70dvh] flex-col px-4 py-6">
+      <h1 className="display text-[1.75rem] tracking-tight">New listing</h1>
+      <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-grey">
+        Take photos now. Sold reads every angle before it prices.
       </p>
 
-      <div className="mt-5">
+      <div className="mt-6">
         <PhotoTray
           photos={previews}
           onRemove={(src) => {
@@ -58,19 +58,25 @@ export function NewListingForm() {
       <button
         type="button"
         onClick={() => setHintsOpen((v) => !v)}
-        className="mt-4 text-left font-mono text-[10px] uppercase tracking-[0.16em] text-ink/50"
+        className="mt-5 self-start text-[13px] font-medium text-grey hover:text-ink"
       >
-        {hintsOpen ? "Hide hints" : "Optional hints"}
+        {hintsOpen ? "Hide optional details" : "Optional details"}
       </button>
 
       {hintsOpen && (
-        <div className="mt-3 grid gap-3">
-          <Field name="brand" label="Brand" placeholder="if you know it" />
-          <Field name="category" label="Category" placeholder="lamp, jacket…" />
+        <div className="panel mt-3 grid gap-3 p-4">
+          <label className="field">
+            Brand
+            <input name="brand" placeholder="if you know it" />
+          </label>
+          <label className="field">
+            Category
+            <input name="category" placeholder="lamp, jacket…" />
+          </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="grid gap-1 text-sm">
+            <label className="field">
               Condition
-              <select name="condition" className="h-12 rounded-xl border border-line bg-paper px-3">
+              <select name="condition">
                 <option value="">From photo</option>
                 <option>new</option>
                 <option>like new</option>
@@ -79,48 +85,26 @@ export function NewListingForm() {
                 <option>poor</option>
               </select>
             </label>
-            <Field name="asking_price" label="Asking $" placeholder="optional" type="number" />
+            <label className="field">
+              Asking $
+              <input name="asking_price" type="number" placeholder="optional" />
+            </label>
           </div>
-          <Field name="reason_for_selling" label="Why sell" placeholder="moving, upgraded…" />
-          <label className="flex items-center gap-3 text-sm">
-            <input type="checkbox" name="auto_post" className="accent-sold" />
+          <label className="field">
+            Why sell
+            <input name="reason_for_selling" placeholder="moving, upgraded…" />
+          </label>
+          <label className="flex items-center gap-2.5 text-[14px] font-normal text-ink">
+            <input type="checkbox" name="auto_post" className="accent-ledger" />
             Auto-post when ready
           </label>
         </div>
       )}
 
-      {error && <p className="mt-3 text-sm text-sold">{error}</p>}
-      <button
-        type="submit"
-        disabled={busy}
-        className="mt-4 h-14 rounded-full bg-sold text-paper disabled:opacity-50"
-      >
-        {busy ? "Handing it to the Lister…" : "List it"}
+      {error && <p className="mt-3 text-[14px] text-stamp">{error}</p>}
+      <button type="submit" disabled={busy} className="btn-primary mt-6 w-full">
+        {busy ? "Creating listing…" : "List this item"}
       </button>
     </form>
-  );
-}
-
-function Field({
-  name,
-  label,
-  placeholder,
-  type = "text",
-}: {
-  name: string;
-  label: string;
-  placeholder: string;
-  type?: string;
-}) {
-  return (
-    <label className="grid gap-1 text-sm">
-      {label}
-      <input
-        name={name}
-        type={type}
-        placeholder={placeholder}
-        className="h-12 rounded-xl border border-line bg-paper px-3"
-      />
-    </label>
   );
 }

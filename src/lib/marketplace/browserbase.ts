@@ -104,9 +104,27 @@ export async function createPersistentContext(name: string) {
 }
 
 export async function createBrowserbaseSession() {
+  // Comps are short, anonymous scrapes. Skip recording/logging/proxies/captcha
+  // so we burn fewer browser minutes and no proxy GB. DOM extract stays local
+  // (Stagehand/session extract would add per-call LLM cost on top of minutes).
   return browserbaseCall(() =>
     client().sessions.create({
       projectId: process.env.BROWSERBASE_PROJECT_ID || undefined,
+      api_timeout: 90,
+      keepAlive: false,
+      proxies: false,
+      browserSettings: {
+        recordSession: false,
+        logSession: false,
+        solveCaptchas: false,
+        blockAds: true,
+        viewport: { width: 1280, height: 900 },
+      },
+      userMetadata: {
+        app: "sold",
+        task: "comps",
+        userId: "demo-seller",
+      },
     })
   );
 }
@@ -156,15 +174,20 @@ export async function createMarketplaceSession(
       const session = await browserbaseCall(() =>
         client().sessions.create({
           projectId,
+          // Login stays alive so the seller can finish sign-in after we
+          // disconnect CDP. Posting does not need a 1-hour idle window.
           keepAlive: true,
-          api_timeout: 3600,
+          api_timeout: task === "login" ? 900 : 1200,
           proxies: attempt.proxies || undefined,
           browserSettings: {
             context: { id: contextId, persist: true },
             ...(task === "posting" ? { allowedDomains: adapter.domains } : {}),
-            recordSession: true,
-            logSession: true,
-            solveCaptchas: task === "posting",
+            // Live View still works without recording. Skipping replay/log cuts
+            // session overhead; captchas stay on for real marketplace walls.
+            recordSession: false,
+            logSession: false,
+            solveCaptchas: true,
+            blockAds: task === "posting",
             viewport: { width: 1280, height: 900 },
             ...(attempt.verified ? { verified: true } : {}),
           },

@@ -1,10 +1,21 @@
 import Link from "next/link";
 
-export function SoldMark() {
+export function SoldMark({
+  large = false,
+  href = "/",
+}: {
+  large?: boolean;
+  href?: string;
+}) {
   return (
-    <Link href="/" className="flex items-center gap-2">
-      <span className="sold-mark text-[2.15rem]">Sold</span>
-      <span className="stamp text-sold">AI</span>
+    <Link
+      href={href}
+      className={`sold-mark inline-flex items-baseline text-ink ${
+        large ? "sold-mark--lg" : ""
+      }`}
+      aria-label="Sold home"
+    >
+      Sold
     </Link>
   );
 }

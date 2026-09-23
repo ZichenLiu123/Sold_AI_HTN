@@ -1,27 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Fraunces, IBM_Plex_Mono, Instrument_Serif } from "next/font/google";
-import Link from "next/link";
+import { IBM_Plex_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { AuthChrome } from "@/components/AuthChrome";
 import { LlmWarning } from "@/components/LlmWarning";
 import { SoldMark } from "@/components/SoldMark";
 import { TabBar } from "@/components/TabBar";
 
-const serif = Instrument_Serif({
-  weight: "400",
+const sans = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-instrument",
-});
-
-const logo = Fraunces({
-  subsets: ["latin"],
-  style: "italic",
-  weight: "500",
-  variable: "--font-fraunces",
-});
-
-const sans = DM_Sans({
-  subsets: ["latin"],
-  variable: "--font-dm",
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-grotesk",
 });
 
 const mono = IBM_Plex_Mono({
@@ -31,8 +19,9 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sold",
-  description: "Snap a photo. Agents write it, price it, post it, and answer the buyer.",
+  title: "Sold — take the picture. Sold does the rest.",
+  description:
+    "AI agents that identify what you photographed, price it from live listings, post across Facebook, Kijiji, OfferUp, Craigslist, Mercari, Poshmark, and eBay, and draft buyer replies — you keep the floor.",
   applicationName: "Sold",
   appleWebApp: {
     capable: true,
@@ -48,7 +37,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#efe4d4",
+  themeColor: "#ffffff",
   interactiveWidget: "resizes-visual",
 };
 
@@ -58,19 +47,31 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full" suppressHydrationWarning>
       <body
-        className={`${serif.variable} ${logo.variable} ${sans.variable} ${mono.variable} h-full font-sans antialiased`}
+        className={`${sans.variable} ${mono.variable} h-full font-sans antialiased`}
       >
-        <div className="sold-frame flex w-full justify-center bg-ink">
-          <div className="app-shell relative flex w-full max-w-[430px] flex-col overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.45)]">
-            <header className="sold-header safe-top z-20 shrink-0 border-b border-line/80 bg-paper/90 backdrop-blur">
-              <div className="flex items-center justify-between px-4 py-3">
+        <div className="sold-frame flex w-full justify-center bg-paper">
+          <div className="app-shell relative flex w-full flex-col overflow-hidden border-x border-line md:border-x-0">
+            <svg width="0" height="0" className="absolute" aria-hidden>
+              <filter id="stamp-bleed">
+                <feTurbulence
+                  type="fractalNoise"
+                  baseFrequency="0.9"
+                  numOctaves="2"
+                  result="noise"
+                />
+                <feDisplacementMap
+                  in="SourceGraphic"
+                  in2="noise"
+                  scale="1.1"
+                  xChannelSelector="R"
+                  yChannelSelector="G"
+                />
+              </filter>
+            </svg>
+            <header className="sold-header safe-top z-20 shrink-0 border-b border-line">
+              <div className="flex h-14 items-center justify-between px-4">
                 <SoldMark />
-                <Link
-                  href="/platforms"
-                  className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/55"
-                >
-                  Accounts
-                </Link>
+                <AuthChrome />
               </div>
               <LlmWarning />
             </header>

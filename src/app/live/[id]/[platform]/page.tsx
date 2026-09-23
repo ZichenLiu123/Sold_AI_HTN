@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getListing, getSellerProfile } from "@/lib/db";
+import { asSellerPage } from "@/lib/api";
+import { getListing, getSellerProfile, listingOwnedBySeller } from "@/lib/db";
 import { money } from "@/lib/format";
 import { listingLocation } from "@/lib/profile";
 import { openListingLink, platformFromSlug } from "@/lib/platforms";
@@ -12,7 +13,11 @@ const THEME: Record<
   { bar: string; name: string; accent: string }
 > = {
   facebook: { bar: "bg-[#1877F2] text-white", name: "marketplace", accent: "text-[#1877F2]" },
+  kijiji: { bar: "bg-[#373373] text-white", name: "kijiji", accent: "text-[#373373]" },
+  offerup: { bar: "bg-[#00A86B] text-white", name: "offerup", accent: "text-[#00A86B]" },
   craigslist: { bar: "bg-[#5B2C83] text-white", name: "craigslist", accent: "text-[#5B2C83]" },
+  mercari: { bar: "bg-[#FF0211] text-white", name: "mercari", accent: "text-[#FF0211]" },
+  poshmark: { bar: "bg-[#7F0353] text-white", name: "poshmark", accent: "text-[#7F0353]" },
   ebay: { bar: "bg-[#E53238] text-white", name: "ebay", accent: "text-[#E53238]" },
   gmail: { bar: "bg-ink text-paper", name: "gmail receipt", accent: "text-sold" },
 };
@@ -23,9 +28,10 @@ export default async function LiveListingPage({
   params: Promise<{ id: string; platform: string }>;
 }) {
   const { id, platform: slug } = await params;
+  return asSellerPage(async (user) => {
   const listing = await getListing(id);
   const platform = platformFromSlug(slug);
-  if (!listing || !platform) notFound();
+  if (!listing || !platform || !listingOwnedBySeller(listing, user.id)) notFound();
   const pickup = listingLocation(listing, await getSellerProfile());
   const theme = THEME[slug] || THEME.ebay;
   const posted = listing.platform_posts.find((p) => p.platform === platform);
@@ -117,4 +123,5 @@ export default async function LiveListingPage({
       </div>
     </div>
   );
+  });
 }

@@ -7,7 +7,7 @@ import {
   logAgent,
   updateListing,
 } from "../db";
-import { DEMO_USER } from "../types";
+import { sellerId } from "../seller-context";
 import type { Listing } from "../types";
 import { isLocalConnection, gotoLocalPage, withLocalChrome } from "../marketplace/local-browser";
 import {
@@ -497,15 +497,20 @@ async function handleThread(page: Awaited<ReturnType<typeof gotoLocalPage>>, thr
   });
 
   if (result.action === "accept") {
-    await updateListing(listing.id, { status: "sold", pipeline_stage: "Sold" });
+    await logAgent(
+      listing.id,
+      "negotiator",
+      "DRAFT",
+      `Accept draft for ${thread.buyer}. Waiting for stamp — not marked sold. Did not type on Facebook.`
+    );
+  } else {
+    await logAgent(
+      listing.id,
+      "negotiator",
+      result.escalate ? "ESCALATE" : result.action.toUpperCase(),
+      `Drafted a reply in Sold for ${thread.buyer}. Did not type on Facebook.`
+    );
   }
-
-  await logAgent(
-    listing.id,
-    "negotiator",
-    result.escalate ? "ESCALATE" : result.action.toUpperCase(),
-    `Drafted a reply in Sold for ${thread.buyer}. Did not type on Facebook.`
-  );
   return { replied: 0, escalated: result.escalate ? 1 : 0, detail: "stored" };
 }
 
@@ -514,7 +519,7 @@ export async function tickFacebookInbox(): Promise<FacebookMonitorStatus> {
   const run = (async () => {
     try {
       const connection = await getPlatformConnection(
-        DEMO_USER.id,
+        sellerId(),
         "Facebook Marketplace"
       );
       if (!connection || connection.status !== "connected") {
@@ -695,7 +700,7 @@ export async function capturePendingFacebookListings() {
 
 export async function peekFacebookInbox() {
   const connection = await getPlatformConnection(
-    DEMO_USER.id,
+    sellerId(),
     "Facebook Marketplace"
   );
   if (!connection || connection.status !== "connected") {
@@ -806,7 +811,7 @@ async function noteInboxWatch(listings: Listing[], detail: string) {
 }
 
 async function tickCraigslistInbox(): Promise<string | undefined> {
-  const connection = await getPlatformConnection(DEMO_USER.id, "Craigslist");
+  const connection = await getPlatformConnection(sellerId(), "Craigslist");
   if (!connection || connection.status !== "connected") return;
   const all = await listListings();
   const listings = liveOnPlatform(all, "Craigslist");
@@ -887,7 +892,7 @@ async function tickCraigslistInbox(): Promise<string | undefined> {
 }
 
 async function tickEbayInbox(): Promise<string | undefined> {
-  const connection = await getPlatformConnection(DEMO_USER.id, "eBay");
+  const connection = await getPlatformConnection(sellerId(), "eBay");
   if (!connection || connection.status !== "connected") return;
   if (!isLocalConnection(connection.metadata)) return;
   const listings = liveOnPlatform(await listListings(), "eBay");
@@ -928,7 +933,7 @@ export async function tickAllInboxes(): Promise<FacebookMonitorStatus> {
   const run = (async () => {
     try {
       const facebook = await getPlatformConnection(
-        DEMO_USER.id,
+        sellerId(),
         "Facebook Marketplace"
       );
       const listings = await listListings();
@@ -1007,9 +1012,9 @@ export async function ensureBackgroundFacebookMonitor() {
   }
   if (memory.soldFbMonitor) return facebookMonitorStatus();
   const listings = await listListings();
-  const facebook = await getPlatformConnection(DEMO_USER.id, "Facebook Marketplace");
-  const craigslist = await getPlatformConnection(DEMO_USER.id, "Craigslist");
-  const ebay = await getPlatformConnection(DEMO_USER.id, "eBay");
+  const facebook = await getPlatformConnection(sellerId(), "Facebook Marketplace");
+  const craigslist = await getPlatformConnection(sellerId(), "Craigslist");
+  const ebay = await getPlatformConnection(sellerId(), "eBay");
   const facebookReady =
     facebook?.status === "connected" &&
     isLocalConnection(facebook.metadata) &&

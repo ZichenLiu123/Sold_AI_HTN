@@ -60,11 +60,11 @@ export function floorCaption(listing: Listing): string {
 export function statusLabel(status: Listing["status"]): string {
   switch (status) {
     case "analyzing":
-      return "Writing";
+      return "Draft";
     case "ready":
-      return "Review";
+      return "Draft";
     case "posting":
-      return "Posting";
+      return "Submitted";
     case "live":
       return "Live";
     case "sold":
@@ -72,23 +72,23 @@ export function statusLabel(status: Listing["status"]): string {
     case "rejected":
       return "Rejected";
     case "error":
-      return "Stuck";
+      return "Submitted";
     default:
       return "Draft";
   }
 }
 
 const ACTION_CLASS: Record<NegotiatorAction, string> = {
-  answer: "text-sage border-sage",
-  counter: "text-gold border-gold",
-  hold: "text-ink border-ink",
-  accept: "text-sold border-sold",
-  escalate: "text-paper bg-ink border-ink",
+  answer: "badge-draft",
+  counter: "badge-submitted",
+  hold: "badge-draft",
+  accept: "badge-live",
+  escalate: "bg-ink text-paper",
 };
 
 export function ActionStamp({ action }: { action: NegotiatorAction }) {
   return (
-    <span className={`stamp rotate-0 text-[10px] ${ACTION_CLASS[action]}`}>
+    <span className={`stamp text-[11px] ${ACTION_CLASS[action]}`}>
       {action}
     </span>
   );

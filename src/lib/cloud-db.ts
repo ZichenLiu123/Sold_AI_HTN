@@ -1,7 +1,7 @@
 import { getStore, type Store } from "@netlify/blobs";
 import { attachPostUrls } from "./platforms";
 import { emptySellerProfile } from "./profile";
-import { DEMO_USER } from "./types";
+import { sellerId } from "./seller-context";
 import type {
   AgentEvent,
   AgentName,
@@ -78,7 +78,7 @@ export async function upsertPlatformConnection(
   return connection;
 }
 
-export async function getSellerProfile(userId = DEMO_USER.id): Promise<SellerProfile> {
+export async function getSellerProfile(userId = sellerId()): Promise<SellerProfile> {
   return readJson(profileKey(userId), emptySellerProfile(userId));
 }
 
@@ -89,9 +89,13 @@ export async function upsertSellerProfile(profile: SellerProfile): Promise<Selle
 }
 
 export async function listListings(): Promise<Listing[]> {
+  const uid = sellerId();
   const ids = await listingIds();
   const listings = await Promise.all(ids.map((id) => getListing(id)));
-  return listings.filter((listing): listing is Listing => listing !== null);
+  return listings.filter(
+    (listing): listing is Listing =>
+      listing !== null && listing.user_id === uid
+  );
 }
 
 export async function getListing(id: string): Promise<Listing | null> {
@@ -101,10 +105,14 @@ export async function getListing(id: string): Promise<Listing | null> {
 }
 
 export async function insertListing(listing: Listing): Promise<Listing> {
-  await store().setJSON(listingKey(listing.id), listing);
+  const next = {
+    ...listing,
+    user_id: listing.user_id || sellerId(),
+  };
+  await store().setJSON(listingKey(next.id), next);
   const ids = await listingIds();
-  await store().setJSON(INDEX, [listing.id, ...ids.filter((id) => id !== listing.id)]);
-  return withLastEvent(listing);
+  await store().setJSON(INDEX, [next.id, ...ids.filter((id) => id !== next.id)]);
+  return withLastEvent(next);
 }
 
 export async function updateListing(

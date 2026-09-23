@@ -1,7 +1,7 @@
 import type { Page } from "playwright-core";
 import type { Listing, Platform, PlatformPost } from "../types";
 import { getListing, getPlatformConnection, logAgent, updateListing } from "../db";
-import { DEMO_USER } from "../types";
+import { sellerId } from "../seller-context";
 import { getMarketplaceAdapter } from "../marketplace/adapters";
 import { isLocalConnection, localPage, withLocalChrome } from "../marketplace/local-browser";
 import {
@@ -210,7 +210,7 @@ async function takedownOnPlatform(
   platform: Platform,
   remoteUrl: string | undefined
 ) {
-  const connection = await getPlatformConnection(DEMO_USER.id, platform);
+  const connection = await getPlatformConnection(sellerId(), platform);
   if (!connection || connection.status !== "connected") {
     throw new Error(`${platform} is not connected.`);
   }
@@ -222,9 +222,17 @@ async function takedownOnPlatform(
   const homeUrl =
     platform === "Facebook Marketplace"
       ? "https://www.facebook.com/marketplace/you/selling"
-      : platform === "eBay"
-        ? "https://www.ebay.com/mys/active"
-        : "https://accounts.craigslist.org/login/home";
+      : platform === "Kijiji"
+        ? "https://www.kijiji.ca/m-my-ads.html"
+        : platform === "OfferUp"
+          ? "https://offerup.com/seller/listings/"
+          : platform === "Mercari"
+            ? "https://www.mercari.com/mypage/listings/"
+            : platform === "Poshmark"
+              ? "https://poshmark.com/closet"
+              : platform === "eBay"
+                ? "https://www.ebay.com/mys/active"
+                : "https://accounts.craigslist.org/login/home";
   const editorUrl =
     platform === "Craigslist" && id
       ? `https://post.craigslist.org/manage/${id}`

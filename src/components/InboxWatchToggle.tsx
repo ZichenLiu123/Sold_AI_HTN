@@ -5,41 +5,75 @@ import { useEffect, useState } from "react";
 type MonitorStatus = {
   enabled?: boolean;
   running?: boolean;
+  ticking?: boolean;
   last_summary?: string;
+  last_tick_at?: string | null;
+  last_error?: string | null;
+  interval_ms?: number;
+  scraped?: number;
+  replied?: number;
+  escalated?: number;
 };
 
+function formatTick(iso: string | null | undefined) {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return null;
+  const ago = Math.max(0, Date.now() - ms);
+  if (ago < 60_000) return "just now";
+  if (ago < 3_600_000) return `${Math.floor(ago / 60_000)}m ago`;
+  return `${Math.floor(ago / 3_600_000)}h ago`;
+}
+
 export function InboxWatchToggle({ compact = false }: { compact?: boolean }) {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [summary, setSummary] = useState("");
+  const [status, setStatus] = useState<MonitorStatus | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function load() {
     const response = await fetch("/api/monitor/facebook", { cache: "no-store" });
     const data = (await response.json()) as MonitorStatus;
-    setEnabled(data.enabled !== false);
-    setSummary(data.last_summary || "");
+    setStatus(data);
   }
 
   useEffect(() => {
-    load().catch(() => setEnabled(true));
+    load().catch(() =>
+      setStatus({ enabled: true, last_summary: "Could not read watch status." })
+    );
+    const id = window.setInterval(() => {
+      load().catch(() => undefined);
+    }, 20_000);
+    return () => window.clearInterval(id);
   }, []);
 
   async function toggle() {
-    if (enabled == null || busy) return;
+    if (!status || busy) return;
+    const enabled = status.enabled !== false;
     setBusy(true);
     try {
       const response = await fetch("/api/monitor/facebook", {
         method: enabled ? "DELETE" : "POST",
       });
       const data = (await response.json()) as MonitorStatus;
-      setEnabled(data.enabled !== false);
-      setSummary(data.last_summary || "");
+      setStatus(data);
     } finally {
       setBusy(false);
     }
   }
 
-  if (enabled == null) return null;
+  if (!status) return null;
+  const enabled = status.enabled !== false;
+  const tick = formatTick(status.last_tick_at);
+  const health = !enabled
+    ? null
+    : status.last_error
+      ? `error · ${status.last_error}`
+      : status.ticking
+        ? "checking now"
+        : status.running
+          ? tick
+            ? `last check ${tick}`
+            : "running"
+          : "on · waiting for first check";
 
   if (compact) {
     return (
@@ -47,9 +81,8 @@ export function InboxWatchToggle({ compact = false }: { compact?: boolean }) {
         type="button"
         onClick={() => void toggle()}
         disabled={busy}
-        className={`font-mono text-[9px] uppercase tracking-[0.16em] ${
-          enabled ? "text-sage" : "text-ink/45"
-        }`}
+        title={status.last_summary || health || undefined}
+        className={`text-[13px] font-semibold ${enabled ? "text-ink" : "text-grey"}`}
       >
         {busy ? "…" : enabled ? "Watch on" : "Watch off"}
       </button>
@@ -57,27 +90,28 @@ export function InboxWatchToggle({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <div className="mt-5 rounded-2xl bg-card px-4 py-4">
+    <div className="mt-5 panel px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-serif text-xl">Inbox watch</p>
-          <p className="mt-1 text-sm text-ink/60">
+          <p className="text-[15px] font-semibold tracking-tight text-ink">Inbox watch</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-grey">
             {enabled
-              ? "Sold checks Facebook, Craigslist, and eBay for real buyer messages."
+              ? "Sold checks Facebook, Craigslist, and eBay on a timer and drafts replies in Sold — never auto-sends. Facebook stays monitor-only."
               : "Off. Sold will not open Chrome to read inboxes."}
           </p>
-          {summary && (
-            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink/40">
-              {summary}
-            </p>
+          <p className="mt-2 text-[12px] text-grey">{health}</p>
+          {status.last_summary && (
+            <p className="mt-1 text-[12px] text-grey">{status.last_summary}</p>
           )}
         </div>
         <button
           type="button"
           onClick={() => void toggle()}
           disabled={busy}
-          className={`shrink-0 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] ${
-            enabled ? "bg-sage text-paper" : "border border-line text-ink/55"
+          className={`shrink-0 rounded-full px-3.5 py-1.5 text-[12px] font-semibold ${
+            enabled
+              ? "bg-ink text-paper"
+              : "border border-line text-ink hover:bg-wash"
           }`}
         >
           {busy ? "…" : enabled ? "On" : "Off"}

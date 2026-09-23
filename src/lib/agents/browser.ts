@@ -5,8 +5,8 @@ import type {
   CompSourceDiagnostic,
   ItemAttributes,
 } from "../types";
-import { createBrowserbaseSession } from "../marketplace/browserbase";
 import { itemSize, median } from "../util.ts";
+import { normalizeGoogleQuery } from "./search-query.ts";
 
 type SiteKey =
   | "ebay"
@@ -216,6 +216,7 @@ function tokenInTitle(title: string, token: string): boolean {
 export function buildCompQueries(attributes: ItemAttributes): {
   primary: string;
   alternate: string;
+  google: string;
 } {
   const brand = cleanTerm(attributes.brand);
   const model = cleanTerm(attributes.model);
@@ -232,15 +233,22 @@ export function buildCompQueries(attributes: ItemAttributes): {
   const categoryBits = categorySearchTerms(category, Boolean(brand));
 
   const identifying = [brand, model].filter(Boolean);
-  // When vision found a brand/model, search that product. Extra color/feature
-  // words turn exact matches into generic "blue gift box" noise.
+  // Prefer vision's Google-ready phrase when present.
+  const fromVision = normalizeGoogleQuery(attributes.search_query, []);
   const primaryParts =
-    identifying.length >= 2
-      ? identifying
-      : identifying.length
-        ? [...identifying, size, ...categoryBits]
-        : [color, ...features, category];
-  if (usefulCondition && !identifying.length && primaryParts.join(" ").length < 65) {
+    fromVision.split(" ").filter(Boolean).length >= 2
+      ? fromVision.split(" ")
+      : identifying.length >= 2
+        ? identifying
+        : identifying.length
+          ? [...identifying, size, ...categoryBits]
+          : [color, ...features, category];
+  if (
+    usefulCondition &&
+    !identifying.length &&
+    !attributes.search_query &&
+    primaryParts.join(" ").length < 65
+  ) {
     primaryParts.push(usefulCondition);
   }
   const primary = [...new Set(primaryParts.filter(Boolean))]
@@ -255,9 +263,17 @@ export function buildCompQueries(attributes: ItemAttributes): {
     [...new Set(alternateParts.filter(Boolean))].join(" ").slice(0, 90).trim() ||
     primary;
 
+  const google = normalizeGoogleQuery(attributes.search_query || primary, [
+    brand,
+    model,
+    size,
+    ...categoryBits,
+  ]);
+
   return {
     primary: primary || "secondhand item",
     alternate,
+    google: google || primary || "secondhand item",
   };
 }
 
@@ -433,9 +449,9 @@ function verifySourceComps(
   ]);
 }
 
-/** Stop only when sold comps can actually lock a price. Asking hits are too noisy to quit on. */
+/** Stop once three sold comps can lock a median — matches hasSoldPriceLock. */
 export function enoughVerifiedComps(comps: CompListing[]): boolean {
-  return comps.filter((comp) => comp.sold).length >= 5;
+  return comps.filter((comp) => comp.sold).length >= 3;
 }
 
 /** Three URL-backed sold comps already lock the median — do not mix in retail asks. */
@@ -977,6 +993,17 @@ function googleSearchUrl(site: Site, query: string): string {
   return `https://www.google.com/search?hl=en&gl=us&num=20&q=${encodeURIComponent(term)}`;
 }
 
+function googleShoppingUrl(query: string) {
+  return `https://www.google.com/search?tbm=shop&udm=28&hl=en&gl=us&q=${encodeURIComponent(query)}`;
+}
+
+/** eBay sold comps via Google — more accurate than fighting eBay markup when query is sharp. */
+function googleEbaySoldUrl(query: string) {
+  return `https://www.google.com/search?hl=en&gl=us&num=20&q=${encodeURIComponent(
+    `site:ebay.com/itm ${query} sold`
+  )}`;
+}
+
 async function settleListings(page: Page) {
   await page
     .evaluate(async () => {
@@ -1041,9 +1068,11 @@ async function trySource(
   site: Site,
   primary: string,
   alternate: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  googleQuery?: string
 ): Promise<SourceResult> {
   const page = await context.newPage();
+  const shopQuery = (googleQuery || primary).trim() || primary;
   const diagnostic: CompSourceDiagnostic = {
     source: site.name,
     attempted: true,
@@ -1059,7 +1088,7 @@ async function trySource(
   signal.addEventListener("abort", stopOnAbort, { once: true });
 
   try {
-    const maxAttempts = 3;
+    const maxAttempts = 2;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       if (signal.aborted) {
         diagnostic.reason = "Stopped — enough verified comps or timeout";
@@ -1070,29 +1099,43 @@ async function trySource(
         /challenge|anti-bot|login|consent|cookie|navigation|timeout/i.test(
           firstFailure || ""
         );
-      const useSearchEngine =
-        site.key !== "shopping" &&
-        ((site.key === "facebook" && attempt === 0) ||
-          attempt === 2 ||
-          (attempt === 1 && blocked));
-      const query = attempt === 0 ? primary : alternate;
-      const url = useSearchEngine
-        ? googleSearchUrl(site, query)
-        : site.url(query);
+      // Google does the heavy lifting: Shopping for retail asks, Google→eBay sold
+      // for completed sales. Direct marketplace pages are fallbacks only.
+      const preferGoogle =
+        site.key === "shopping" ||
+        site.key === "ebay" ||
+        (site.key === "facebook" && attempt === 0) ||
+        attempt === maxAttempts - 1 ||
+        (attempt === 1 && blocked);
+      const query = attempt === 0 ? shopQuery : alternate || shopQuery;
+      let url: string;
+      let viaGoogle = false;
+      if (site.key === "shopping") {
+        url = googleShoppingUrl(query);
+        viaGoogle = true;
+      } else if (site.key === "ebay" && attempt === 0) {
+        url = googleEbaySoldUrl(query);
+        viaGoogle = true;
+      } else if (preferGoogle) {
+        url = googleSearchUrl(site, query);
+        viaGoogle = true;
+      } else {
+        url = site.url(query);
+      }
       diagnostic.search_url = url;
       try {
         await page.goto(url, {
           waitUntil: "domcontentloaded",
           timeout: 12_000,
         });
-        if (useSearchEngine) {
+        if (viaGoogle && site.key !== "shopping") {
           await page
             .waitForSelector("div.MjjYud, div.g, .tF2Cxc", { timeout: 6500 })
             .catch(() => null);
         } else {
           await waitForEvidence(page, site);
         }
-        const dismissedConsent = useSearchEngine
+        const dismissedConsent = viaGoogle
           ? false
           : await clearConsent(page, site);
         await page
@@ -1110,8 +1153,10 @@ async function trySource(
         await settleListings(page);
         const state = await pageState(page);
         const pageFailure = failureFromPage(state.body, state.title);
-        const found = useSearchEngine
-          ? await extractSearchResults(page, site)
+        const found = viaGoogle
+          ? site.key === "shopping"
+            ? await extractSiteListings(page, site)
+            : await extractSearchResults(page, site)
           : await extractSiteListings(page, site);
         if (found.length > 0) {
           diagnostic.successful = true;
@@ -1167,9 +1212,10 @@ export async function searchComps(
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 95_000);
+  const timer = setTimeout(() => controller.abort(), 70_000);
   try {
     const tokens = relevanceTokens(attributes);
+    // Google Shopping + Google→eBay sold do the heavy lifting from vision's query.
     return await scrapeMarkets(
       queries,
       tokens.any,
@@ -1189,7 +1235,7 @@ export async function searchComps(
 }
 
 async function scrapeMarkets(
-  queries: { primary: string; alternate: string },
+  queries: { primary: string; alternate: string; google: string },
   requiredAny: string[],
   requiredAll: string[],
   signal: AbortSignal,
@@ -1199,42 +1245,39 @@ async function scrapeMarkets(
   }
 ): Promise<CompData> {
   let browser: Browser | null = null;
+  let sessionId: string | null = null;
   let sessionUrl: string | null = null;
-  try {
-    const session = await withAbort(createBrowserbaseSession(), signal);
-    sessionUrl = `https://browserbase.com/sessions/${session.id}`;
-    await progress?.onSession?.(sessionUrl);
-    browser = await withAbort(
-      chromium.connectOverCDP(session.connectUrl, { timeout: 15_000 }),
-      signal
-    );
-    const context = browser.contexts()[0] || (await browser.newContext());
-    const starter = context.pages()[0];
-    if (starter) await starter.close().catch(() => undefined);
+  // Wave 1: Google Shopping + Google→eBay sold. Wave 2 only if still short.
+  const coreKeys = new Set<SiteKey>(["shopping", "ebay"]);
+  const coreSites = SITES.filter((site) => coreKeys.has(site.key));
+  const extraSites = SITES.filter((site) => !coreKeys.has(site.key));
 
-    // Each source gets its own page. Stop remaining retries only after
-    // several sold comps can lock a price — asking hits alone are too noisy.
+    async function runWave(sites: Site[]): Promise<SourceResult[]> {
     const earlyStop = new AbortController();
     const sourceSignal = AbortSignal.any([signal, earlyStop.signal]);
     const partial: Array<SourceResult | undefined> = Array.from({
-      length: SITES.length,
+      length: sites.length,
     });
     const verifiedSoFar = () =>
       verifySourceComps(
-        partial.flatMap((result) => result?.comps || []),
-        queries.primary,
+        [
+          ...waveResults.flatMap((result) => result.comps),
+          ...partial.flatMap((result) => result?.comps || []),
+        ],
+        queries.google || queries.primary,
         requiredAny,
         requiredAll
       );
 
     const settled = await Promise.allSettled(
-      SITES.map((site, index) =>
+      sites.map((site, index) =>
         trySource(
-          context,
+          context!,
           site,
           queries.primary,
           queries.alternate,
-          sourceSignal
+          sourceSignal,
+          queries.google
         ).then(async (result) => {
           partial[index] = result;
           await progress?.onSource?.(
@@ -1249,13 +1292,13 @@ async function scrapeMarkets(
         })
       )
     );
-    const results: SourceResult[] = settled.map((result, index) =>
+    return settled.map((result, index) =>
       result.status === "fulfilled"
         ? result.value
         : {
             comps: [],
             diagnostic: {
-              source: SITES[index].name,
+              source: sites[index].name,
               attempted: true,
               successful: false,
               attempts: 1,
@@ -1268,10 +1311,60 @@ async function scrapeMarkets(
             },
           }
     );
+  }
+
+  let context: BrowserContext | null = null;
+  let waveResults: SourceResult[] = [];
+
+  try {
+    const { createBrowserbaseSession } = await import("../marketplace/browserbase");
+    const session = await withAbort(createBrowserbaseSession(), signal);
+    sessionId = session.id;
+    sessionUrl = `https://browserbase.com/sessions/${session.id}`;
+    await progress?.onSession?.(sessionUrl);
+    browser = await withAbort(
+      chromium.connectOverCDP(session.connectUrl, { timeout: 15_000 }),
+      signal
+    );
+    context = browser.contexts()[0] || (await browser.newContext());
+    const starter = context.pages()[0];
+    if (starter) await starter.close().catch(() => undefined);
+
+    waveResults = await runWave(coreSites);
+    if (
+      extraSites.length &&
+      !enoughVerifiedComps(
+        verifySourceComps(
+          waveResults.flatMap((result) => result.comps),
+          queries.google || queries.primary,
+          requiredAny,
+          requiredAll
+        )
+      )
+    ) {
+      waveResults = [...waveResults, ...(await runWave(extraSites))];
+    } else if (extraSites.length) {
+      waveResults = [
+        ...waveResults,
+        ...extraSites.map((site) => ({
+          comps: [] as CompListing[],
+          diagnostic: {
+            source: site.name,
+            attempted: false,
+            successful: false,
+            attempts: 0,
+            found: 0,
+            reason: "Skipped — Google Shopping / eBay sold comps already locked a price",
+          } satisfies CompSourceDiagnostic,
+        })),
+      ];
+    }
+
+    const results = waveResults;
     const diagnostics = results.map((result) => result.diagnostic);
     const verified = verifySourceComps(
       results.flatMap((result) => result.comps),
-      queries.primary,
+      queries.google || queries.primary,
       requiredAny,
       requiredAll
     );
@@ -1289,10 +1382,13 @@ async function scrapeMarkets(
     const successfulSources = [
       ...new Set(verified.map((comp) => comp.source)),
     ];
+    const attempted = results
+      .filter((result) => result.diagnostic.attempted)
+      .map((result) => result.diagnostic.source);
 
     if (verified.length < 3) {
       const details = diagnostics
-        .filter((diagnostic) => !diagnostic.successful)
+        .filter((diagnostic) => !diagnostic.successful && diagnostic.attempted)
         .map((diagnostic) => `${diagnostic.source}: ${diagnostic.reason}`)
         .join("; ");
       const reason = `Only ${verified.length} trustworthy comparable${
@@ -1301,18 +1397,16 @@ async function scrapeMarkets(
       const partial = summarize(verified, {
         source: "Insufficient verified marketplace evidence",
         sources: successfulSources,
-        query: queries.primary,
+        query: queries.google || queries.primary,
         mocked: false,
         confidence: "none",
         failure_reason: reason,
         session_url: sessionUrl,
-        attempted_sources: SITES.map((site) => site.name),
+        attempted_sources: attempted.length ? attempted : SITES.map((site) => site.name),
         successful_sources: successfulSources,
         diagnostics,
         pricing_basis: "none",
       });
-      // Keep URL-backed evidence visible, but never derive a price from fewer
-      // than three trustworthy listings.
       return {
         ...partial,
         min: null,
@@ -1335,18 +1429,26 @@ async function scrapeMarkets(
           : "low";
 
     return summarize(selected, {
-      source: `Live Browserbase comps: ${successfulSources.join(", ")}`,
+      source: `Google comps: ${successfulSources.join(", ")}`,
       sources: successfulSources,
-      query: queries.primary,
+      query: queries.google || queries.primary,
       mocked: false,
       confidence,
       failure_reason: null,
       session_url: sessionUrl,
-      attempted_sources: SITES.map((site) => site.name),
+      attempted_sources: attempted.length ? attempted : SITES.map((site) => site.name),
       successful_sources: successfulSources,
       diagnostics,
     });
   } finally {
     if (browser) await browser.close().catch(() => undefined);
+    if (sessionId) {
+      try {
+        const { releaseSession } = await import("../marketplace/browserbase");
+        await releaseSession(sessionId);
+      } catch {
+        /* session may already be gone */
+      }
+    }
   }
 }

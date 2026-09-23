@@ -307,12 +307,15 @@ async function llmJudgments(
 
 export async function evaluateComps(
   attributes: ItemAttributes,
-  comps: CompData
+  comps: CompData,
+  options?: { llm?: boolean }
 ): Promise<CompData> {
   const incoming = comps.comps || [];
-  const judgments =
-    (await llmJudgments(attributes, incoming)) ||
-    incoming.map((comp) => heuristicJudgment(comp, attributes));
+  const useLlm = options?.llm !== false;
+  const judgments = useLlm
+    ? (await llmJudgments(attributes, incoming)) ||
+      incoming.map((comp) => heuristicJudgment(comp, attributes))
+    : incoming.map((comp) => heuristicJudgment(comp, attributes));
   const judged = applyJudgments(incoming, judgments).filter(
     (comp) => !mismatchedVariantReason(comp, attributes)
   );

@@ -4,7 +4,8 @@ import { isAgentRunning, stoppedListingPatch } from "./agents/cancel";
 import { attachPostUrls } from "./platforms";
 import { dataDir, isEphemeralFs } from "./storage";
 import { emptySellerProfile } from "./profile";
-import { DEMO_USER, PLATFORMS } from "./types";
+import { PLATFORMS } from "./types";
+import { sellerId } from "./seller-context";
 import type {
   AgentEvent,
   AgentName,
@@ -25,6 +26,7 @@ import type {
 
 type ListingRow = {
   id: string;
+  user_id: string;
   photos: string;
   title: string;
   description: string;
@@ -71,7 +73,7 @@ const globalForDb = globalThis as unknown as {
   soldSchema?: number;
 };
 
-const SCHEMA = 4;
+const SCHEMA = 5;
 
 function openDb(): DatabaseSync {
   if (!globalForDb.soldDb) {
@@ -89,6 +91,7 @@ function migrate(db: DatabaseSync) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS listings (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL DEFAULT 'demo-seller',
       photos TEXT NOT NULL,
       title TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
@@ -164,6 +167,18 @@ function migrate(db: DatabaseSync) {
   }
   if (!messageCols.some((col) => col.name === "buyer_name")) {
     db.exec("ALTER TABLE messages ADD COLUMN buyer_name TEXT");
+  }
+
+  const listingCols = db
+    .prepare("PRAGMA table_info(listings)")
+    .all() as { name: string }[];
+  if (!listingCols.some((col) => col.name === "user_id")) {
+    db.exec(
+      "ALTER TABLE listings ADD COLUMN user_id TEXT NOT NULL DEFAULT 'demo-seller'"
+    );
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS listings_user_id_idx ON listings(user_id)"
+    );
   }
 }
 
@@ -243,6 +258,7 @@ export function upsertPlatformConnectionSync(
 function mapListing(row: ListingRow): Listing {
   return {
     id: row.id,
+    user_id: row.user_id || "demo-seller",
     photos: JSON.parse(row.photos) as string[],
     title: row.title,
     description: row.description,
@@ -323,10 +339,22 @@ function settleStopping(listing: Listing): Listing {
   return updateListingSync(listing.id, stoppedListingPatch(listing)) || listing;
 }
 
+function ownsListing(listing: Listing, userId = sellerId()): boolean {
+  return listing.user_id === userId;
+}
+
+/** True when the active seller owns this listing. */
+export function listingOwnedBySeller(listing: Listing, userId?: string): boolean {
+  return ownsListing(listing, userId ?? sellerId());
+}
+
 export function listListingsSync(): Listing[] {
+  const userId = sellerId();
   const rows = openDb()
-    .prepare("SELECT * FROM listings ORDER BY created_at DESC")
-    .all() as ListingRow[];
+    .prepare(
+      "SELECT * FROM listings WHERE user_id = ? ORDER BY created_at DESC"
+    )
+    .all(userId) as ListingRow[];
   return rows.map((row) => {
     const listing = mappedListing(row);
     ensureEvents(listing);
@@ -340,16 +368,18 @@ export function getListingSync(id: string): Listing | null {
 }
 
 export function insertListingSync(listing: Listing): Listing {
+  const user_id = listing.user_id || sellerId();
   openDb()
     .prepare(
       `INSERT INTO listings (
-        id, photos, title, description, price, floor_price, status, platforms,
+        id, user_id, photos, title, description, price, floor_price, status, platforms,
         created_at, attributes, comps, price_reasoning, hints, auto_post,
         platform_posts, pipeline_stage, pipeline_error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       listing.id,
+      user_id,
       JSON.stringify(listing.photos),
       listing.title,
       listing.description,
@@ -367,7 +397,7 @@ export function insertListingSync(listing: Listing): Listing {
       listing.pipeline_stage,
       listing.pipeline_error
     );
-  return listing;
+  return { ...listing, user_id };
 }
 
 export function updateListingSync(
@@ -572,7 +602,7 @@ type ProfileRow = {
   updated_at: string;
 };
 
-export function getSellerProfileSync(userId = DEMO_USER.id): SellerProfile {
+export function getSellerProfileSync(userId = sellerId()): SellerProfile {
   const row = openDb()
     .prepare("SELECT * FROM seller_profiles WHERE user_id = ?")
     .get(userId) as ProfileRow | undefined;
@@ -610,7 +640,7 @@ export function upsertSellerProfileSync(profile: SellerProfile): SellerProfile {
   return next;
 }
 
-export async function getSellerProfile(userId = DEMO_USER.id) {
+export async function getSellerProfile(userId = sellerId()) {
   return isEphemeralFs()
     ? (await cloud()).getSellerProfile(userId)
     : getSellerProfileSync(userId);

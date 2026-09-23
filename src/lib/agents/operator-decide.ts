@@ -123,6 +123,40 @@ export function typeValueFor(
   return "";
 }
 
+/** Fill obvious empty fields without an LLM call. Returns null when guessing would be unsafe. */
+export function deterministicAction(
+  sight: FormSight,
+  listing: OperatorListing,
+  goal: OperatorGoal | undefined,
+  history: string[]
+): OperatorAction | null {
+  if (goal?.mode === "takedown") return null;
+  if (sight.kind === "other" || stillOnWrongPage(sight)) return null;
+  for (const label of sight.empty) {
+    if (forbiddenTarget(label) || isFilePickerLabel(label)) continue;
+    if (!/title|price|amount|description|posting body|body|brand/i.test(label)) continue;
+    const text = typeValueFor(label, listing, goal);
+    if (!text) continue;
+    const stamped = `type:${label}`;
+    if (history.includes(stamped)) continue;
+    return { action: "type", target: label, text };
+  }
+  return null;
+}
+
+/** Vision screenshots are expensive — only when text sight is clearly insufficient. */
+export function operatorNeedsScreenshot(
+  history: string[],
+  sight: FormSight,
+  lastOutcome: string
+) {
+  if (describeStuck(history, sight, lastOutcome)) return true;
+  if (/Could not click|bad step|miss:|Blocked|still not|invalid JSON/i.test(lastOutcome)) {
+    return true;
+  }
+  return false;
+}
+
 export function labelAction(decision: OperatorAction) {
   if (decision.action === "type") return `type:${decision.target}`;
   if (decision.action === "click") return `click:${decision.target}`;

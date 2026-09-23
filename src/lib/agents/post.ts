@@ -2,7 +2,7 @@ import type { Listing, Platform, PlatformPost } from "../types";
 import { decoratePosts, livePath } from "../platforms";
 import { shouldSendLiveReceipt, upsertPlatformPosts } from "../marketplace/policy";
 import { getPlatformConnection, updateListing, upsertPlatformConnection } from "../db";
-import { DEMO_USER } from "../types";
+import { sellerId } from "../seller-context";
 import {
   captureFacebookListing,
   findCraigslistListingUrl,
@@ -67,7 +67,7 @@ export async function postListing(listing: Listing): Promise<PlatformPost[]> {
       posts.push(existing);
       continue;
     }
-    const connection = await getPlatformConnection(DEMO_USER.id, platform);
+    const connection = await getPlatformConnection(sellerId(), platform);
     if (connection?.status !== "connected" || !connection.context_id) {
       posts.push({
         platform,

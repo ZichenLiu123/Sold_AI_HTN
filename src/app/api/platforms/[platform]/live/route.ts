@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureLiveLogin } from "@/lib/marketplace/connections";
 import { isMarketplacePlatform } from "@/lib/marketplace/adapters";
 import { platformFromSlug } from "@/lib/platforms";
+import { withSeller } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,25 +19,30 @@ export async function GET(
   }
   try {
     const fresh = new URL(req.url).searchParams.get("fresh") === "1";
-    const liveUrl = await ensureLiveLogin(platform, { fresh });
+    const liveUrl = await withSeller(async () =>
+      ensureLiveLogin(platform, { fresh })
+    );
     return NextResponse.redirect(liveUrl);
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Browserbase could not open a login browser.";
+      error instanceof Error
+        ? error.message
+        : "Browserbase could not open a login browser.";
     return new NextResponse(
       `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${platform} login</title>
   </head>
-  <body style="margin:0;background:#f6f1e8;color:#1c1917;font:16px/1.45 ui-sans-serif,system-ui,sans-serif">
+  <body style="margin:0;background:#ffffff;color:#0a0a0a;font:16px/1.5 ui-sans-serif,system-ui,sans-serif">
     <main style="max-width:28rem;margin:20vh auto;padding:0 1.5rem">
-      <p style="letter-spacing:.18em;text-transform:uppercase;font:11px ui-monospace,monospace;opacity:.5">Sold</p>
-      <h1 style="font-family:Georgia,serif;font-size:1.8rem;font-weight:500">Browserbase didn’t open login</h1>
-      <p style="opacity:.7">${message}</p>
-      <p style="margin-top:1.25rem">
-        <a href="/platforms" style="display:inline-block;background:#1c1917;color:#f6f1e8;text-decoration:none;border-radius:999px;padding:.75rem 1.1rem;font-size:.85rem">Back to accounts</a>
+      <p style="font-weight:700;letter-spacing:-0.04em">Sold</p>
+      <h1 style="font-size:1.75rem;font-weight:700;letter-spacing:-0.035em;margin:1rem 0 0.75rem">Couldn’t open login</h1>
+      <p style="color:#71717a">${message}</p>
+      <p style="margin-top:1.5rem">
+        <a href="/platforms" style="display:inline-flex;align-items:center;justify-content:center;height:2.75rem;padding:0 1.125rem;background:#0a0a0a;color:#fff;text-decoration:none;border-radius:0.5rem;font-size:0.9375rem;font-weight:600">Back to accounts</a>
       </p>
     </main>
   </body>

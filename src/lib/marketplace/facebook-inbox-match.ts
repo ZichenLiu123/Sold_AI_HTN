@@ -173,12 +173,27 @@ export function facebookThreadId(buyer: string, listingId: string) {
 }
 
 export function marketplaceThreadId(
-  platform: "Facebook Marketplace" | "Craigslist" | "eBay",
+  platform: string,
   listingId: string,
   buyer: string
 ) {
   const prefix =
-    platform === "Facebook Marketplace" ? "fb" : platform === "eBay" ? "ebay" : "cl";
+    (
+      {
+        "Facebook Marketplace": "fb",
+        Craigslist: "cl",
+        eBay: "ebay",
+        Kijiji: "kijiji",
+        OfferUp: "offerup",
+        Mercari: "mercari",
+        Poshmark: "poshmark",
+      } as Record<string, string>
+    )[platform] ||
+    platform
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 12) ||
+    "mp";
   const slug =
     buyer
       .toLowerCase()
