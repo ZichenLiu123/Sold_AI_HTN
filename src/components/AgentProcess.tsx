@@ -9,7 +9,7 @@ const PHASES = [
   {
     label: "Publish",
     title: "Write it. Post it.",
-    body: "A listing draft you can edit, then browser agents publish to Facebook, Kijiji, OfferUp, Craigslist, Mercari, Poshmark, and eBay — only after you approve.",
+    body: "A listing draft you can edit, then browser agents publish to Facebook, Kijiji, Karrot, OfferUp, Craigslist, Mercari, Poshmark, and eBay — only after you approve.",
   },
   {
     label: "Reply",

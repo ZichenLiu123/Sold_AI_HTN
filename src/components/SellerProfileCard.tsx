@@ -61,8 +61,8 @@ export function SellerProfileCard() {
         </span>
       </div>
       <p className="mt-1.5 text-[13px] leading-relaxed text-grey">
-        City, postal code, and pickup notes for posts. Sold will not invent an
-        address.
+        Used on marketplace posts. Sold only uses what you save here — it will not
+        invent an address.
       </p>
       <div className="mt-4 grid gap-3">
         <label className="field">
@@ -122,7 +122,7 @@ export function SellerProfileCard() {
       {saved ? <p className="mt-3 text-[13px] text-ledger">Saved.</p> : null}
       {!ready && !loading ? (
         <p className="mt-3 text-[12px] text-grey">
-          Add city and postal code before marketplace posts can go out.
+          Add a city and postal code before Sold can post.
         </p>
       ) : null}
       <button

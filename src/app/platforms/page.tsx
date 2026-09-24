@@ -13,7 +13,7 @@ export default function PlatformsPage() {
       <p className="mt-2 max-w-md text-[14px] leading-relaxed text-grey">
         {hosted
           ? "Log in in the live browser tab that opens. This hosted site cannot open Chrome on a laptop."
-          : "Connect the big US + Canada marketplaces. Sold reuses the browser session — it does not store your password."}
+          : "Connect US + Canada marketplaces (including Kijiji and Karrot). Sold reuses the browser session — it does not store your password."}
       </p>
       <PlatformAccounts hosted={hosted} />
       <div className="mt-8">

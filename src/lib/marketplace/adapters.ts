@@ -511,6 +511,112 @@ export async function hasChallenge(page: Page) {
   );
 }
 
+async function signedOutChromeVisible(page: Page) {
+  const names = [/^sign in$/i, /^log in$/i, /^log on$/i, /^sign up$/i];
+  for (const name of names) {
+    const hit = page.getByRole("link", { name }).or(page.getByRole("button", { name }));
+    if (await hit.first().isVisible().catch(() => false)) return true;
+  }
+  return false;
+}
+
+async function softAuthCookies(page: Page, hosts: string[]) {
+  const cookies = await page.context().cookies();
+  return cookies.some((cookie) => {
+    const domain = cookie.domain.toLowerCase();
+    if (!hosts.some((host) => domain.includes(host))) return false;
+    if (!cookie.value || cookie.value.length < 6) return false;
+    const name = cookie.name.toLowerCase();
+    return /token|auth|session|access|refresh|jwt|sid|uid|user|login|account|ssid|c_user/.test(
+      name
+    );
+  });
+}
+
+async function detectKarrotLogin(page: Page): Promise<LoginEvidence> {
+  const home = "https://www.karrotmarket.com/ca/";
+  let url = page.url();
+
+  async function authCookiesPresent() {
+    const cookies = await page.context().cookies();
+    return cookies.some((cookie) => {
+      const host = `${cookie.domain} ${cookie.name}`.toLowerCase();
+      if (!/karrot|daangn/.test(host)) return false;
+      if (!cookie.value || cookie.value.length < 4) return false;
+      const name = cookie.name.toLowerCase();
+      return (
+        /token|auth|session|access|refresh|jwt|sid|uid|user|login|account|oidc|id_token|interslice/.test(
+          name
+        ) || name === "user_id"
+      );
+    });
+  }
+
+  // Auth finishes on accounts.*.karrotmarket.com — always judge from the flea-market home.
+  if (/accounts\.[^/]*karrotmarket\.com/i.test(url) || /\/sign-in|\/login/i.test(url)) {
+    await page
+      .goto(home, { waitUntil: "domcontentloaded", timeout: 45_000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(1_800);
+    url = page.url();
+  }
+
+  const signInVisible = await page
+    .getByRole("button", { name: /^sign in$/i })
+    .or(page.getByRole("link", { name: /^sign in$/i }))
+    .first()
+    .isVisible()
+    .catch(() => false);
+  const loggedInChrome = await visible(page, [
+    'a[href*="/chats"]',
+    'a[href*="/chat"]',
+    'a[href*="/mysales"]',
+    'a[href*="/my"]',
+    'button[aria-label*="profile" i]',
+    'button[aria-label*="account" i]',
+    'img[alt*="profile" i]',
+    '[data-testid*="avatar"]',
+    '[data-testid*="profile"]',
+  ]);
+  let authCookies = await authCookiesPresent();
+
+  // Cookie landed but UI still showing Sign In — soft-refresh once.
+  if (authCookies && signInVisible) {
+    await page
+      .goto(home, { waitUntil: "domcontentloaded", timeout: 45_000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(2_000);
+    url = page.url();
+    authCookies = await authCookiesPresent();
+  }
+
+  const signInStill =
+    (await page
+      .getByRole("button", { name: /^sign in$/i })
+      .or(page.getByRole("link", { name: /^sign in$/i }))
+      .first()
+      .isVisible()
+      .catch(() => false)) && !loggedInChrome;
+
+  const onMarket = /karrotmarket\.com\/(?:ca|us|gb)\b/i.test(url);
+  const loggedIn =
+    Boolean(loggedInChrome) ||
+    (onMarket && !signInStill) ||
+    (authCookies && !signInStill && !/sign-in|\/login/i.test(url));
+
+  return {
+    loggedIn,
+    url,
+    detail: loggedIn
+      ? signInStill
+        ? "Karrot auth cookies are present."
+        : "Karrot home no longer shows Sign In — session looks signed in."
+      : authCookies
+        ? "Karrot still shows Sign In. Finish login in the browser, then Sold will check again."
+        : "No Karrot Sign In state change yet. Finish email/phone/Google login, then Sold will check again.",
+  };
+}
+
 function adapter(config: {
   platform: Platform;
   domains: string[];
@@ -560,19 +666,37 @@ function adapter(config: {
           loggedIn = Boolean(signOut);
         }
       }
+      if (config.platform === "Karrot") {
+        return detectKarrotLogin(page);
+      }
+      if (!loggedIn && !onAuthWall) {
+        const softPlatforms: Platform[] = [
+          "Kijiji",
+          "OfferUp",
+          "Mercari",
+          "Poshmark",
+        ];
+        if (softPlatforms.includes(config.platform)) {
+          const signedOut = await signedOutChromeVisible(page);
+          const cookies = await softAuthCookies(page, config.domains);
+          if (!signedOut && (cookies || Boolean(selector))) {
+            loggedIn = true;
+          }
+        }
+      }
       if (!loggedIn && (await hasChallenge(page))) {
         return {
           loggedIn: false,
           url,
-          detail: `CAPTCHA or 2FA is on screen in ${config.platform}. Finish it in the Chrome window, then Sold will check again.`,
+          detail: `CAPTCHA or 2FA is on screen in ${config.platform}. Finish it in the live browser, then tap I finished logging in.`,
         };
       }
       return {
         loggedIn,
         url,
         detail: loggedIn
-          ? `Authenticated ${config.platform} controls are visible.`
-          : `No authenticated ${config.platform} indicator was found at ${new URL(url).hostname}.`,
+          ? `Authenticated ${config.platform} session detected.`
+          : `Still signed out on ${new URL(url).hostname}. Finish login in the browser, then tap I finished logging in.`,
       };
     },
     async fill(page, listing) {
@@ -646,6 +770,7 @@ function adapter(config: {
         config.platform === "Craigslist" ||
         config.platform === "eBay" ||
         config.platform === "Kijiji" ||
+        config.platform === "Karrot" ||
         config.platform === "OfferUp" ||
         config.platform === "Mercari" ||
         config.platform === "Poshmark"
@@ -757,6 +882,44 @@ const ADAPTERS: Record<Platform, MarketplaceAdapter> = {
     publishNames: [/^post$/i, /^publish$/i, /post ad/i, /^next$/i, /^continue$/i],
     prefillNames: [/^next$/i, /^continue$/i, /for sale/i],
     successUrl: /kijiji\.ca\/.+\/\d{6,}/i,
+  }),
+  Karrot: adapter({
+    platform: "Karrot",
+    domains: [
+      "karrotmarket.com",
+      "accounts.ca.karrotmarket.com",
+      "accounts.us.karrotmarket.com",
+      "accounts.karrotmarket.com",
+      "daangn.com",
+    ],
+    // Home shows Sign In; OAuth lives on accounts.*.karrotmarket.com after that click.
+    loginUrl: "https://www.karrotmarket.com/ca/",
+    createUrl: "https://www.karrotmarket.com/ca/",
+    loggedInSelectors: [
+      'a[href*="/chats"]',
+      'a[href*="/mysales"]',
+      'button[aria-label*="profile" i]',
+      'button[aria-label*="account" i]',
+    ],
+    loggedOutUrl: /sign-in|\/login|accounts\.[^/]*karrotmarket\.com/i,
+    title: [
+      'input[name*="title" i]',
+      'input[aria-label*="title" i]',
+      'input[placeholder*="title" i]',
+    ],
+    description: [
+      'textarea[name*="description" i]',
+      'textarea[aria-label*="description" i]',
+      'textarea[placeholder*="description" i]',
+    ],
+    price: [
+      'input[name*="price" i]',
+      'input[aria-label*="price" i]',
+      'input[placeholder*="price" i]',
+    ],
+    publishNames: [/^post$/i, /^publish$/i, /^list$/i, /^next$/i, /^continue$/i, /sell/i],
+    prefillNames: [/^next$/i, /^continue$/i, /sell/i, /^\+?\s*sell$/i],
+    successUrl: /karrotmarket\.com\/.+\/buy-sell\//i,
   }),
   OfferUp: adapter({
     platform: "OfferUp",

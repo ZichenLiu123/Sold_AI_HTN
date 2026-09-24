@@ -21,7 +21,7 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Sold — take the picture. Sold does the rest.",
   description:
-    "AI agents that identify what you photographed, price it from live listings, post across Facebook, Kijiji, OfferUp, Craigslist, Mercari, Poshmark, and eBay, and draft buyer replies — you keep the floor.",
+    "AI agents that identify what you photographed, price it from live listings, post across Facebook, Kijiji, Karrot, OfferUp, Craigslist, Mercari, Poshmark, and eBay, and draft buyer replies — you keep the floor.",
   applicationName: "Sold",
   appleWebApp: {
     capable: true,

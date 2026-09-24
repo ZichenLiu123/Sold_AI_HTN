@@ -64,13 +64,13 @@ const PINS = [
 const MARKETS = [
   { name: "Facebook", url: "facebook.com/marketplace/item/…" },
   { name: "Kijiji", url: "kijiji.ca/v-…/…" },
+  { name: "Karrot", url: "karrotmarket.com/ca/buy-sell/…" },
   { name: "OfferUp", url: "offerup.com/item/detail/…" },
-  { name: "Mercari", url: "mercari.com/us/item/…" },
 ] as const;
 
 const AGENT_LINES: Record<Phase, string[]> = {
   identify: ["Reading the photo", "Citing live comps"],
-  post: ["Posting to Facebook", "Posting to Kijiji", "Posting to OfferUp"],
+  post: ["Posting to Facebook", "Posting to Kijiji", "Posting to Karrot"],
   reply: ["Reading the offer", "Drafting a reply"],
 };
 

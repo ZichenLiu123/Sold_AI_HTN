@@ -366,6 +366,7 @@ function reviseStartUrl(platform: Platform) {
     return "https://www.facebook.com/marketplace/you/selling";
   }
   if (platform === "Kijiji") return "https://www.kijiji.ca/m-my-ads.html";
+  if (platform === "Karrot") return "https://www.karrotmarket.com/ca/";
   if (platform === "OfferUp") return "https://offerup.com/seller/listings/";
   if (platform === "Mercari") return "https://www.mercari.com/mypage/listings/";
   if (platform === "Poshmark") return "https://poshmark.com/closet";

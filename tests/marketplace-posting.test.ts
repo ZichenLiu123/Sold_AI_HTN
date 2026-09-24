@@ -26,6 +26,7 @@ test("maps login evidence without treating a context as authentication", () => {
 test("selects a fixed adapter for every supported marketplace", () => {
   assert.equal(getMarketplaceAdapter("Facebook Marketplace").domains[0], "facebook.com");
   assert.equal(getMarketplaceAdapter("Kijiji").domains[0], "kijiji.ca");
+  assert.equal(getMarketplaceAdapter("Karrot").domains[0], "karrotmarket.com");
   assert.equal(getMarketplaceAdapter("OfferUp").domains[0], "offerup.com");
   assert.equal(getMarketplaceAdapter("Craigslist").domains[0], "craigslist.org");
   assert.equal(getMarketplaceAdapter("Mercari").domains[0], "mercari.com");
@@ -33,6 +34,7 @@ test("selects a fixed adapter for every supported marketplace", () => {
   assert.equal(getMarketplaceAdapter("eBay").domains[0], "ebay.com");
   assert.equal(platformSlug("Facebook Marketplace"), "facebook");
   assert.equal(platformSlug("Kijiji"), "kijiji");
+  assert.equal(platformSlug("Karrot"), "karrot");
   assert.match(platformSlug("Facebook Marketplace"), /^[\w\-_,;:.()&$%#@!?~]+$/);
 });
 

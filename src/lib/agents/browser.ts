@@ -14,6 +14,7 @@ type SiteKey =
   | "facebook"
   | "mercari"
   | "offerup"
+  | "karrot"
   | "poshmark"
   | "shopping";
 
@@ -90,6 +91,16 @@ const SITES: Site[] = [
     readySelector: 'a[href*="/item/"], [data-test*="listing"]',
     url: (query) =>
       `https://offerup.com/search?q=${encodeURIComponent(query)}`,
+  },
+  {
+    key: "karrot",
+    name: "Karrot",
+    host: "karrotmarket.com",
+    sold: false,
+    itemLink: 'a[href*="/buy-sell/"]',
+    readySelector: 'a[href*="/buy-sell/"]',
+    url: (query) =>
+      `https://www.karrotmarket.com/ca/search/${encodeURIComponent(query)}`,
   },
   {
     key: "poshmark",

@@ -3,6 +3,7 @@ import type { Listing, Platform, PlatformPost } from "./types";
 export const PLATFORM_SLUGS: Record<string, string> = {
   "Facebook Marketplace": "facebook",
   Kijiji: "kijiji",
+  Karrot: "karrot",
   OfferUp: "offerup",
   Craigslist: "craigslist",
   Mercari: "mercari",
@@ -14,6 +15,7 @@ export const PLATFORM_SLUGS: Record<string, string> = {
 const SLUG_TO_PLATFORM: Record<string, Platform | "Gmail receipt"> = {
   facebook: "Facebook Marketplace",
   kijiji: "Kijiji",
+  karrot: "Karrot",
   offerup: "OfferUp",
   craigslist: "Craigslist",
   mercari: "Mercari",
@@ -43,6 +45,8 @@ export function isPublicItemUrl(platform: string, url?: string | null) {
       return /facebook\.com\/marketplace\/item\/\d+/i.test(url);
     case "Kijiji":
       return /kijiji\.ca\/.+/i.test(url) && /\/\d{6,}/.test(url);
+    case "Karrot":
+      return /karrotmarket\.com\/.+\/buy-sell\//i.test(url);
     case "OfferUp":
       return /offerup\.com\/item\//i.test(url);
     case "Craigslist":
@@ -85,6 +89,8 @@ export function marketplaceSearchUrl(platform: string, title: string): string {
       return `https://www.facebook.com/marketplace/search/?query=${q}`;
     case "Kijiji":
       return `https://www.kijiji.ca/b-search.html?keywords=${q}`;
+    case "Karrot":
+      return `https://www.karrotmarket.com/ca/search/${q}`;
     case "OfferUp":
       return `https://offerup.com/search/list/?q=${q}`;
     case "Craigslist":

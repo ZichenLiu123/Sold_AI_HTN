@@ -29,7 +29,7 @@ function onPhone() {
 }
 
 function platformRegion(platform: string) {
-  if (platform === "Kijiji") return "Canada";
+  if (platform === "Kijiji" || platform === "Karrot") return "Canada";
   if (platform === "OfferUp") return "US";
   if (platform === "Mercari" || platform === "Poshmark") return "US + Canada";
   return "US + Canada";
@@ -40,6 +40,9 @@ function platformCapability(platform: string) {
     return "Posts and verifies a live URL. Inbox is monitor-only — you reply on Facebook.";
   }
   if (platform === "Kijiji") {
+    return `${platformRegion(platform)}. Posts and verifies a live listing URL.`;
+  }
+  if (platform === "Karrot") {
     return `${platformRegion(platform)}. Posts and verifies a live listing URL.`;
   }
   if (platform === "OfferUp") {
@@ -70,13 +73,16 @@ function accountHint(
     return connection.metadata.evidence || platformCapability(connection.platform);
   }
   if (waiting) {
+    if (connection.metadata.evidence) {
+      return connection.metadata.evidence;
+    }
     if (hosted) {
-      return "Finish login in the live browser tab — Sold will detect it automatically.";
+      return "Finish login in the live browser tab, then tap I finished logging in.";
     }
     if (usesLocalLogin(connection.platform) || onPhone()) {
-      return "Chrome opened on the computer running Sold — not on this phone. Log in there; Sold will detect it.";
+      return "Chrome opened on the computer running Sold — not on this phone. Log in there, then tap I finished logging in.";
     }
-    return "Finish login in the window that opened — Sold will detect it automatically.";
+    return "Finish login in the window that opened, then tap I finished logging in.";
   }
   if (connection.status === "expired") {
     return "Session expired. Reconnect once — Sold still does not store your password.";
@@ -202,10 +208,35 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
     void watchLocalLogin(connection.platform);
   }
 
+  function openLiveLogin(platform: string) {
+    const url = liveLoginPath(platform, true);
+    // Keep Accounts open so "I finished logging in" stays tappable.
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) window.location.assign(url);
+  }
+
   function connect(connection: Connection) {
     setError("");
+    const markAwaiting = () => {
+      setConnections((current) =>
+        current.map((item) =>
+          item.platform === connection.platform
+            ? {
+                ...item,
+                status: "awaiting_login" as const,
+                metadata: {
+                  ...item.metadata,
+                  evidence:
+                    "Finish signing in in the new tab, then tap I finished logging in.",
+                },
+              }
+            : item
+        )
+      );
+    };
     if (cloudHost) {
-      window.location.assign(liveLoginPath(connection.platform, true));
+      openLiveLogin(connection.platform);
+      markAwaiting();
       return;
     }
     setBusy(connection.platform);
@@ -218,7 +249,9 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
           await connectLocal(connection);
           return;
         }
-        window.location.assign(liveLoginPath(connection.platform, true));
+        openLiveLogin(connection.platform);
+        markAwaiting();
+        setBusy("");
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "Could not open login.");
         setBusy("");
@@ -259,6 +292,13 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
       setConnections((current) =>
         current.map((item) => (item.platform === data.platform ? data : item))
       );
+      if (data.status !== "connected") {
+        setError(
+          data.metadata?.evidence ||
+            data.error ||
+            `Still waiting on ${data.platform}. Finish login in the browser, then tap again.`
+        );
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Check failed.");
     } finally {
@@ -406,7 +446,9 @@ export function PlatformAccounts({ hosted = false }: { hosted?: boolean }) {
                     disabled={Boolean(busy)}
                     className="btn-secondary mt-2 h-10 w-full text-[13px]"
                   >
-                    I finished logging in
+                    {busy === `${connection.platform}:check`
+                      ? "Checking…"
+                      : "I finished logging in"}
                   </button>
                 )}
                 {(expired || errored) && !waiting && (

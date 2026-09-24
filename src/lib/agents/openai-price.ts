@@ -6,7 +6,7 @@ import { parseMarketplacePrice } from "./browser";
 const PRICE_PROMPT = `You look up what a specific product currently sells for in the United States.
 
 Run several live web searches, not one. Cover used marketplaces and current retail:
-eBay sold/completed, Mercari, Facebook Marketplace, Craigslist, Poshmark, OfferUp, Google Shopping, Amazon, Target, Walmart, and grocery sites when it is food or drink.
+eBay sold/completed, Mercari, Facebook Marketplace, Craigslist, Kijiji, Karrot, Poshmark, OfferUp, Google Shopping, Amazon, Target, Walmart, and grocery sites when it is food or drink.
 
 Return 8–12 listings from as many different sites as you can find. JSON only:
 {

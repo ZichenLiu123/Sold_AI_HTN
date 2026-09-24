@@ -15,6 +15,7 @@ export type SellerProfile = {
 export const PLATFORMS = [
   "Facebook Marketplace",
   "Kijiji",
+  "Karrot",
   "OfferUp",
   "Craigslist",
   "Mercari",

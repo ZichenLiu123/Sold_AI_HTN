@@ -184,6 +184,7 @@ export function marketplaceThreadId(
         Craigslist: "cl",
         eBay: "ebay",
         Kijiji: "kijiji",
+        Karrot: "karrot",
         OfferUp: "offerup",
         Mercari: "mercari",
         Poshmark: "poshmark",

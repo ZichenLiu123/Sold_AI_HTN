@@ -14,6 +14,7 @@ const THEME: Record<
 > = {
   facebook: { bar: "bg-[#1877F2] text-white", name: "marketplace", accent: "text-[#1877F2]" },
   kijiji: { bar: "bg-[#373373] text-white", name: "kijiji", accent: "text-[#373373]" },
+  karrot: { bar: "bg-[#FF6F0F] text-white", name: "karrot", accent: "text-[#FF6F0F]" },
   offerup: { bar: "bg-[#00A86B] text-white", name: "offerup", accent: "text-[#00A86B]" },
   craigslist: { bar: "bg-[#5B2C83] text-white", name: "craigslist", accent: "text-[#5B2C83]" },
   mercari: { bar: "bg-[#FF0211] text-white", name: "mercari", accent: "text-[#FF0211]" },

@@ -223,15 +223,17 @@ async function takedownOnPlatform(
       ? "https://www.facebook.com/marketplace/you/selling"
       : platform === "Kijiji"
         ? "https://www.kijiji.ca/m-my-ads.html"
-        : platform === "OfferUp"
-          ? "https://offerup.com/seller/listings/"
-          : platform === "Mercari"
-            ? "https://www.mercari.com/mypage/listings/"
-            : platform === "Poshmark"
-              ? "https://poshmark.com/closet"
-              : platform === "eBay"
-                ? "https://www.ebay.com/mys/active"
-                : "https://accounts.craigslist.org/login/home";
+        : platform === "Karrot"
+          ? "https://www.karrotmarket.com/ca/"
+          : platform === "OfferUp"
+            ? "https://offerup.com/seller/listings/"
+            : platform === "Mercari"
+              ? "https://www.mercari.com/mypage/listings/"
+              : platform === "Poshmark"
+                ? "https://poshmark.com/closet"
+                : platform === "eBay"
+                  ? "https://www.ebay.com/mys/active"
+                  : "https://accounts.craigslist.org/login/home";
   const editorUrl =
     platform === "Craigslist" && id
       ? `https://post.craigslist.org/manage/${id}`

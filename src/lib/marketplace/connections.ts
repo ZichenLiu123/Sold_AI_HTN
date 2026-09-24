@@ -160,11 +160,38 @@ async function startConnection(platform: Platform): Promise<PublicConnection> {
   // Navigate the cloud tab to the marketplace sign-in page before handing
   // the live view to the seller. openLoginPage disconnects our CDP client
   // but leaves the Browserbase session running on that URL.
-  const landed = await openLoginPage(
-    created.id,
-    adapter.loginUrl,
-    created.connectUrl
-  ).catch(() => adapter.loginUrl);
+  let landed = adapter.loginUrl;
+  if (platform === "Karrot") {
+    try {
+      const page = await connectToSession(created.id, created.connectUrl);
+      await page.goto(adapter.loginUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 45_000,
+      });
+      const signIn = page
+        .getByRole("button", { name: /^sign in$/i })
+        .or(page.getByRole("link", { name: /^sign in$/i }))
+        .first();
+      if (await signIn.isVisible().catch(() => false)) {
+        await signIn.click({ timeout: 5_000 }).catch(() => undefined);
+        await page.waitForTimeout(800).catch(() => undefined);
+      }
+      landed = page.url();
+      await disconnectSession(created.id);
+    } catch {
+      landed = await openLoginPage(
+        created.id,
+        adapter.loginUrl,
+        created.connectUrl
+      ).catch(() => adapter.loginUrl);
+    }
+  } else {
+    landed = await openLoginPage(
+      created.id,
+      adapter.loginUrl,
+      created.connectUrl
+    ).catch(() => adapter.loginUrl);
+  }
   const liveUrl =
     (await sessionLiveUrl(created.id, adapter.domains[0]).catch(() => null)) ||
     `https://www.browserbase.com/sessions/${created.id}`;
@@ -192,6 +219,16 @@ export async function beginLocalConnection(platform: Platform): Promise<PublicCo
     (await getPlatformConnection(sellerId(), platform)) || emptyConnection(platform);
   const adapter = getMarketplaceAdapter(platform);
   const page = await openLocalLogin(platform, adapter.loginUrl);
+  if (platform === "Karrot") {
+    const signIn = page
+      .getByRole("button", { name: /^sign in$/i })
+      .or(page.getByRole("link", { name: /^sign in$/i }))
+      .first();
+    if (await signIn.isVisible().catch(() => false)) {
+      await signIn.click({ timeout: 5_000 }).catch(() => undefined);
+      await page.waitForTimeout(800).catch(() => undefined);
+    }
+  }
   const now = new Date().toISOString();
   return upsertPlatformConnection({
     ...current,
@@ -215,16 +252,7 @@ export async function checkLocalConnection(platform: Platform): Promise<PublicCo
     (await getPlatformConnection(sellerId(), platform)) || emptyConnection(platform);
   const adapter = getMarketplaceAdapter(platform);
   const page = await openLocalLogin(platform, adapter.loginUrl);
-  if (platform === "Facebook Marketplace") {
-    const cookies = await page.context().cookies("https://www.facebook.com");
-    const signedIn = cookies.some((cookie) => cookie.name === "c_user" && cookie.value);
-    if (signedIn && !/\/marketplace/i.test(page.url())) {
-      await page.goto("https://www.facebook.com/marketplace", {
-        waitUntil: "domcontentloaded",
-        timeout: 45_000,
-      });
-    }
-  }
+  await prepareForLoginDetect(page, platform);
   const evidence = await adapter.detectLogin(page);
   const now = new Date().toISOString();
   const saved = await upsertPlatformConnection({
@@ -275,75 +303,168 @@ export async function disconnectConnection(platform: Platform): Promise<PublicCo
   return saved;
 }
 
+const DETECT_HOME: Partial<Record<Platform, string>> = {
+  "Facebook Marketplace": "https://www.facebook.com/marketplace",
+  Craigslist: "https://accounts.craigslist.org/login/home",
+  eBay: "https://www.ebay.com/",
+  Kijiji: "https://www.kijiji.ca/",
+  Karrot: "https://www.karrotmarket.com/ca/",
+  OfferUp: "https://offerup.com/",
+  Mercari: "https://www.mercari.com/",
+  Poshmark: "https://poshmark.com/",
+};
+
+async function prepareForLoginDetect(
+  page: Awaited<ReturnType<typeof connectToSession>>,
+  platform: Platform
+) {
+  const home = DETECT_HOME[platform];
+  if (!home) return;
+  const url = page.url();
+  const onAuthOrBlank =
+    !url ||
+    /about:blank/i.test(url) ||
+    /\/login|\/signin|sign-in|\/checkpoint|accounts\./i.test(url);
+  const host = (() => {
+    try {
+      return new URL(home).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  })();
+  const offSite = host ? !url.toLowerCase().includes(host) : false;
+  if (onAuthOrBlank || offSite || platform === "Karrot") {
+    await page
+      .goto(home, { waitUntil: "domcontentloaded", timeout: 45_000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(1_400).catch(() => undefined);
+  }
+}
+
+async function attachLoginPage(
+  sessionId: string,
+  connectUrl?: string | null
+): Promise<Awaited<ReturnType<typeof connectToSession>> | undefined> {
+  try {
+    return await connectToSession(sessionId, connectUrl || undefined);
+  } catch {
+    await disconnectSession(sessionId).catch(() => undefined);
+    try {
+      return await connectToSession(sessionId, connectUrl || undefined);
+    } catch {
+      return undefined;
+    }
+  }
+}
+
 export async function checkConnection(platform: Platform): Promise<PublicConnection> {
   const current = await getPlatformConnection(sellerId(), platform);
   if (current && isLocalConnection(current.metadata)) {
     return checkLocalConnection(platform);
   }
-  if (!current?.context_id) return emptyConnection(platform);
+  if (!current?.context_id && !current?.session_id) {
+    const now = new Date().toISOString();
+    return {
+      ...(await upsertPlatformConnection({
+        ...(current || emptyConnection(platform)),
+        status: "awaiting_login",
+        updated_at: now,
+        checked_at: now,
+        error: null,
+        metadata: {
+          ...(current?.metadata || {}),
+          evidence:
+            "Login browser is still opening. Wait a couple seconds after Open login, then tap I finished logging in again.",
+        },
+      })),
+    };
+  }
 
-  let sessionId = current.session_id;
-  let liveUrl: string | null = null;
-  let page;
-  try {
-    if (sessionId) {
-      page = await connectToSession(sessionId);
-      liveUrl = await sessionLiveUrl(sessionId);
-    } else {
-      throw new Error("No active session");
+  let sessionId = current?.session_id || null;
+  let liveUrl: string | null = current?.metadata?.live_url || null;
+  let page: Awaited<ReturnType<typeof connectToSession>> | undefined;
+
+  if (sessionId) {
+    const running = await getBrowserbaseSession(sessionId).catch(() => null);
+    if (running?.status === "RUNNING") {
+      liveUrl = await sessionLiveUrl(sessionId).catch(() => liveUrl);
+      page = await attachLoginPage(sessionId, running.connectUrl);
+      if (!page) {
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+        page = await attachLoginPage(sessionId, running.connectUrl);
+      }
     }
-  } catch {
-    const running = sessionId
-      ? await getBrowserbaseSession(sessionId).catch(() => null)
-      : null;
-    if (sessionId && running?.status === "RUNNING") {
-      liveUrl = await sessionLiveUrl(sessionId).catch(() => current.metadata.live_url || null);
+  }
+
+  // Persisted Browserbase context still has cookies even if the live tab attach failed.
+  if (!page && current?.context_id) {
+    try {
+      const session = await startMarketplaceSession(
+        current.context_id,
+        platform,
+        "login",
+        { live: true }
+      );
+      sessionId = session.sessionId;
+      liveUrl = session.liveUrl;
+      page = session.page;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not open login browser.";
       const now = new Date().toISOString();
       return {
         ...(await upsertPlatformConnection({
-          ...current,
+          ...(current || emptyConnection(platform)),
           status: "awaiting_login",
           updated_at: now,
           checked_at: now,
-          error: null,
+          error: message,
           metadata: {
-            ...current.metadata,
-            evidence: "Finish the captcha or 2FA in the live login window, then check again.",
+            ...(current?.metadata || {}),
+            evidence: message,
             ...(liveUrl ? { live_url: liveUrl } : {}),
           },
         })),
         live_url: liveUrl,
       };
     }
-    const session = await startMarketplaceSession(
-      current.context_id,
-      platform,
-      "login",
-      { live: true }
-    );
-    sessionId = session.sessionId;
-    liveUrl = session.liveUrl;
-    page = session.page;
-    await page.goto(getMarketplaceAdapter(platform).loginUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: 45_000,
-    });
   }
 
+  if (!page) {
+    const now = new Date().toISOString();
+    return {
+      ...(await upsertPlatformConnection({
+        ...(current || emptyConnection(platform)),
+        status: "awaiting_login",
+        updated_at: now,
+        checked_at: now,
+        error: null,
+        metadata: {
+          ...(current?.metadata || {}),
+          evidence:
+            "Could not reach the login browser. Tap Open login again, finish signing in, then tap I finished logging in.",
+          ...(liveUrl ? { live_url: liveUrl } : {}),
+        },
+      })),
+      live_url: liveUrl,
+    };
+  }
+
+  await prepareForLoginDetect(page, platform);
   const evidence = await getMarketplaceAdapter(platform).detectLogin(page);
   if (sessionId && !evidence.loggedIn) {
     await disconnectSession(sessionId);
   }
   const now = new Date().toISOString();
   const saved = await upsertPlatformConnection({
-    ...current,
+    ...(current || emptyConnection(platform)),
     session_id: evidence.loggedIn ? null : sessionId,
     status: statusFromLoginEvidence(evidence.loggedIn, true),
     updated_at: now,
     checked_at: now,
     error: null,
     metadata: {
-      ...current.metadata,
+      ...(current?.metadata || {}),
       last_url: evidence.url,
       evidence: evidence.detail,
       ...(liveUrl ? { live_url: liveUrl } : {}),
