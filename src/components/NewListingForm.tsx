@@ -73,11 +73,11 @@ export function NewListingForm() {
         <div className="panel mt-3 grid gap-3 p-4">
           <label className="field">
             Brand
-            <input name="brand" placeholder="if you know it" />
+            <input name="brand" placeholder="Brand if you know it" />
           </label>
           <label className="field">
             Category
-            <input name="category" placeholder="lamp, jacket…" />
+            <input name="category" placeholder="e.g. lamp, jacket" />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="field">
@@ -93,12 +93,12 @@ export function NewListingForm() {
             </label>
             <label className="field">
               Asking $
-              <input name="asking_price" type="number" placeholder="optional" />
+              <input name="asking_price" type="number" placeholder="Asking price" />
             </label>
           </div>
           <label className="field">
             Why sell
-            <input name="reason_for_selling" placeholder="moving, upgraded…" />
+            <input name="reason_for_selling" placeholder="e.g. moving, upgraded" />
           </label>
           <label className="flex items-center gap-2.5 text-[14px] font-normal text-ink">
             <input type="checkbox" name="auto_post" className="accent-ledger" />

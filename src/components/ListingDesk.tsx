@@ -1669,7 +1669,7 @@ function LiveListingView({
               {buyerCount === 0
                 ? authConfigured()
                   ? "No buyers yet. A chat appears when someone writes you."
-                  : "No buyers yet. A chat appears when someone writes you — or open Demo to practice."
+                  : "No buyers yet. A chat appears here when someone writes you on a live listing."
                 : `${buyerCount} ${buyerCount === 1 ? "person" : "people"}`}
             </span>
           </span>
@@ -1788,7 +1788,7 @@ function ThreadList({
             ? "A thread appears here when someone writes about this listing. Facebook stays monitor-only — you reply there."
             : authConfigured()
               ? "Marketplace buyers land here as themselves when they write you."
-              : "Marketplace buyers land here as themselves. Demo is only for practicing in Sold."}
+              : "Marketplace buyers land here as themselves. Practice threads are labeled when auth is off."}
         </p>
         {threads.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-line bg-card px-4 py-5">

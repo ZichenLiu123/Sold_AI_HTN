@@ -12,13 +12,19 @@ export function MarketingPage() {
       <header className="safe-top marketing-nav">
         <div className="page-wide flex h-16 items-center justify-between">
           <SoldMark large />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <a
               href="#agents"
               className="hidden text-[13px] font-medium text-grey hover:text-ink sm:inline"
             >
               How it works
             </a>
+            <Link
+              href="/listings"
+              className="hidden text-[13px] font-medium text-grey hover:text-ink sm:inline"
+            >
+              Open app
+            </Link>
             <Link href="/login" className="btn-primary h-9 px-4 text-[13px]">
               Sign in
             </Link>
@@ -72,19 +78,16 @@ export function MarketingPage() {
 
       <section className="marketing-cta">
         <div className="page marketing-cta__inner">
-          <h2 className="marketing-heading">Free while we&apos;re in beta</h2>
+          <h2 className="marketing-heading">Ready when you are</h2>
           <p className="marketing-copy mt-4 max-w-[28rem]">
-            Leave an email for when paid seats open — or sign in if you already
-            have access.
+            Sign in to start listing, or leave an email for updates when paid
+            seats open.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <WaitlistForm />
-            <Link
-              href="/login"
-              className="text-center text-[13px] font-medium text-grey underline-offset-4 hover:text-ink hover:underline sm:px-2"
-            >
-              Already have access? Sign in
+            <Link href="/login" className="btn-primary h-11 px-5 text-[14px]">
+              Sign in to Sold
             </Link>
+            <WaitlistForm />
           </div>
         </div>
       </section>
@@ -100,9 +103,19 @@ export function MarketingPage() {
               live without a real listing URL.
             </p>
           </div>
-          <p className="text-[12px] text-grey">
-            © {new Date().getFullYear()} Sold
-          </p>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <div className="flex gap-4 text-[13px] font-medium text-grey">
+              <Link href="/login" className="hover:text-ink">
+                Sign in
+              </Link>
+              <Link href="/listings" className="hover:text-ink">
+                Listings
+              </Link>
+            </div>
+            <p className="text-[12px] text-grey">
+              © {new Date().getFullYear()} Sold
+            </p>
+          </div>
         </div>
       </footer>
     </div>

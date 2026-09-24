@@ -8,6 +8,7 @@ export function MarketingHero() {
     <section className="marketing-hero">
       <div className="page-wide marketing-hero__inner">
         <div className="marketing-hero__copy">
+          <p className="marketing-label">Marketplace selling, finished</p>
           <h1 className="marketing-hero__title">
             Take the picture.
             <br />

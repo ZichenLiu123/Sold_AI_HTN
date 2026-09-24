@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import { SoldMark } from "@/components/SoldMark";
 
 export default function Error({
   error,
@@ -16,7 +17,8 @@ export default function Error({
 
   return (
     <main className="mx-auto flex min-h-[70vh] w-full max-w-lg flex-col items-start justify-center px-5 py-16">
-      <h1 className="text-[1.75rem] font-semibold tracking-[-0.03em] text-ink">
+      <SoldMark />
+      <h1 className="mt-10 text-[1.75rem] font-semibold tracking-[-0.03em] text-ink">
         Something went wrong
       </h1>
       <p className="mt-3 text-[15px] leading-relaxed text-ink/60">

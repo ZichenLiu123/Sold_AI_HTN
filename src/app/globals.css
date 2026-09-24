@@ -1751,3 +1751,13 @@ select:focus {
     padding-bottom: 3rem;
   }
 }
+
+
+/* Hide Netlify free-plan badge */
+iframe[src*="netlify"],
+iframe[title*="Netlify"],
+body > div[data-netlify-badge],
+a[href*="www.netlify.com"][aria-label*="Netlify"] {
+  display: none !important;
+  pointer-events: none !important;
+}
